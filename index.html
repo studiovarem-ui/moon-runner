@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Moon Runner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#08081a;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+</style>
+</head>
+<body>
+<canvas id="g"></canvas>
+<script>
+const CV=document.getElementById('g'),CX=CV.getContext('2d');
+const PX=3,GW=320,GH=214,SW=GW*PX,SH=GH*PX;
+CV.width=SW;CV.height=SH;
+function resize(){
+  let s=Math.min(window.innerWidth/SW,window.innerHeight/SH);
+  CV.style.width=SW*s+'px';CV.style.height=SH*s+'px';
+}
+window.addEventListener('resize',resize);resize();
+function px(x,y,c){CX.fillStyle=c;CX.fillRect(Math.floor(x)*PX,Math.floor(y)*PX,PX,PX)}
+function txt(t,x,y,sz,col,al){CX.fillStyle=col||'#fff';CX.font=`bold ${sz}px monospace`;CX.textAlign=al||'left';CX.textBaseline='top';CX.fillText(t,x,y)}
+let state='title';
+let fr=0;
+let selectCards=[];
+let data={best:0,cumDist:0,unlocked:{s:true,c:false,p:false},rover:'s'};
+let stars=[];
+for(let i=0;i<350;i++)stars.push({x:Math.random()*GW*2,y:Math.random()*GH*0.62,sz:Math.random()<0.06?2:1,b:0.3+Math.random()*0.7,tw:Math.random()*6.28,ts:0.005+Math.random()*0.02,h:Math.random()<0.1?1:Math.random()<0.18?2:0});
+function drawStars(ox){
+  for(let s of stars){
+    let sx=((s.x-ox*0.05)%GW+GW)%GW;
+    let tw=Math.sin(fr*s.ts+s.tw);
+    let a=s.b*(0.55+tw*0.45);if(a<0.1)continue;
+    let c=s.h===1?(a>0.5?'#ffccaa':'#aa8866'):s.h===2?(a>0.5?'#aaccff':'#6688aa'):(a>0.5?'#ffffff':'#999999');
+    px(sx,s.y,c);if(s.sz>=2){px(sx+1,s.y,c);px(sx,s.y+1,c)}
+  }
+}
+function drawNebula(ox){
+  CX.globalAlpha=0.06;
+  for(let i=0;i<15;i++){
+    let nx=((i*23-ox*0.01)%GW+GW)%GW;
+    CX.fillStyle=['#301848','#201060','#1a2858'][i%3];
+    CX.fillRect(nx*PX,(20+Math.sin(i*2.3)*30)*PX,(10+Math.sin(i*1.7)*8)*PX,(5+Math.sin(i*3.1)*4)*PX);
+  }
+  CX.globalAlpha=1;
+}
+function drawSky(){
+  for(let y=0;y<GH;y++){
+    let t=y/GH;
+    CX.fillStyle=`rgb(${12+t*18|0},${8+t*22|0},${30+t*50|0})`;
+    CX.fillRect(0,y*PX,SW,PX);
+  }
+}
+function drawPlanet(cx,cy,r,br,bg,bb,ring){
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
+    let nz=Math.sqrt(Math.max(0,1-(dx/r)**2-(dy/r)**2));
+    let sh=Math.max(0.12,(-dx/r)*0.25+(-dy/r)*0.4+nz*0.85)*(1-Math.pow(d/r,3)*0.5);
+    let band=Math.sin(dy/r*4+dx/r*0.5)*0.15;
+    px(cx+dx,cy+dy,`rgb(${Math.min(255,br*sh*(1+band)|0)},${Math.min(255,bg*sh*(1+band)|0)},${Math.min(255,bb*sh*(1+band)|0)})`);
+  }
+  if(ring)for(let rx=-r*2;rx<=r*2;rx++){
+    let ry=Math.floor(rx*0.25);
+    if(Math.abs(Math.sqrt(rx*rx+ry*ry*4)-r*1.5)>2)continue;
+    if(Math.abs(rx)<r&&Math.abs(ry)<2)continue;
+    px(cx+rx,cy+ry,'rgba(200,180,150,0.3)');
+  }
+}
+function drawEarth(cx,cy,r){
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
+    let nz=Math.sqrt(Math.max(0,1-(dx/r)**2-(dy/r)**2));
+    let sh=Math.max(0.15,(-dx/r)*0.3+(-dy/r)*0.5+nz*0.8)*(1-Math.pow(d/r,3)*0.4);
+    let land=Math.sin(dx*0.5+1)*Math.sin(dy*0.6+2)>0.1;
+    let R,G,B;
+    if(land){R=50+sh*80;G=120+sh*130;B=60+sh*50}else{R=30+sh*60;G=60+sh*100;B=140+sh*120}
+    if(Math.sin(dx*0.8+fr*0.004)*Math.sin(dy*0.7)>0.35){R+=50*sh;G+=50*sh;B+=50*sh}
+    px(cx+dx,cy+dy,`rgb(${Math.min(255,R|0)},${Math.min(255,G|0)},${Math.min(255,B|0)})`);
+  }
+}
+function drawMoon(cx,cy,r){
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
+    let nx=dx/r,ny=dy/r,nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
+    let sh=Math.max(0.15,nx*(-0.2)+ny*(-0.45)+nz*0.8)*(1-Math.pow(d/r,4)*0.55);
+    let base=145+sh*95;
+    if(Math.sin(dx*0.09)*Math.sin(dy*0.07+0.3)+Math.sin(dx*0.15)*0.25>0.2)base-=28;
+    let craters=[[0.3,-0.35,0.13],[-0.38,0.2,0.1],[0.1,0.38,0.08],[-0.2,-0.18,0.07]];
+    for(let c of craters){let cd=Math.sqrt((nx-c[0])**2+(ny-c[1])**2);if(cd<c[2])base-=18*(1-cd/c[2]);else if(cd<c[2]*1.35)base+=10}
+    base=Math.max(85,Math.min(245,base));
+    px(cx+dx,cy+dy,`rgb(${base+5|0},${base+2|0},${base-4|0})`);
+  }
+}
+function getGroundY(x,ox){
+  let mx=x+(ox||0)*0.6;
+  return GH-38+Math.sin(mx*0.007)*5+Math.sin(mx*0.02)*3+Math.sin(mx*0.055)*1.5;
+}
+function drawGround(ox){
+  let baseY=GH-38;
+  for(let x=0;x<GW;x++){
+    let mx=x+ox*0.08;
+    let h=Math.sin(mx*0.012)*14+Math.sin(mx*0.03)*6+22;
+    let top=baseY-h;
+    for(let y=Math.max(0,top|0);y<baseY;y++){
+      let dep=(y-top)/Math.max(1,h);let s=32+dep*22;
+      px(x,y,`rgb(${s+10|0},${s+5|0},${s+18|0})`);
+    }
+  }
+  for(let x=0;x<GW;x++){
+    let mx=x+ox*0.2;
+    let h=Math.sin(mx*0.008)*10+Math.sin(mx*0.025)*5+15;
+    let top=baseY-h;
+    for(let y=Math.max(0,top|0);y<baseY;y++){
+      let dep=(y-top)/Math.max(1,h);let s=45+dep*20;
+      px(x,y,`rgb(${s+8|0},${s+2|0},${s+6|0})`);
+    }
+  }
+  for(let x=0;x<GW;x++){
+    let surfY=getGroundY(x,ox);
+    for(let y=Math.floor(surfY);y<GH;y++){
+      let dep=y-surfY;
+      let base=dep<1?175:dep<2?155:dep<5?135:dep<12?115-dep*0.6:100-dep*0.3;
+      let tex=Math.sin(x*1.8+y*1.3)*5+Math.sin(x*0.5+y*2.5)*3;
+      let r=base+tex+12,g=base+tex+5,b=base+tex-10;
+      px(x,y,`rgb(${Math.max(35,Math.min(215,r|0))},${Math.max(30,Math.min(210,g|0))},${Math.max(22,Math.min(200,b|0)})`);
+    }
+  }
+}
+const RD=[
+'......................................',
+'......0..........00000...............',
+'.....0c0........0aadda0.............',
+'.....0c0........0adcda0.............',
+'.....010........0aadda0.............',
+'.....010.........00000...............',
+'.....010....00000000000000000........',
+'..0000100000ggggggggggggggggg00......',
+'.0LLb0100ggghhhhhhhhhhhhhhhhggg0...0.',
+'.0Lb00000gghiiiiiiiiiiiiiiiiiihg0..00',
+'0eee0..0gghijjjjjjjjjjjjjjjjihg0.0r0',
+'0ee0..0gghijjkkjjjkkjjjkkjjjjihg00rr0',
+'0ee0.0gghijjkPPkjkPPkjkPPkjjjihg0rr0',
+'0ee0.0gghijjkkjjjkkjjjkkjjjjjihg0rr0',
+'0000.0gghiiiiiiiiiiiiiiiiiiiiiihg00000',
+'.....0gghhhhhhhhhhhhhhhhhhhhhhhhg0....',
+'.....0gggggggggggggggggggggggggg0....',
+'......00..0000........0000..00.......',
+'.....0WW00MWWM0......0MWWM00WW0.....',
+'....0WwwW0MwmmM0....0MwmmM0WwwW0....',
+'....0WwwW0MmwmM0....0MmwmM0WwwW0....',
+'.....0WW00MWWM0......0MWWM00WW0.....',
+];
+const RC={'0':'#1a1520','1':'#606878','a':'#8898a8','d':'#a0b0c0','c':'#b8c8d8','g':'#505860','h':'#788898','i':'#a0b0b8','j':'#c8d0d8','k':'#889098','P':'#3058a0','e':'#786048','L':'#50b8f0','b':'#607080','r':'#708898','W':'#404850','M':'#303840','w':'#586878','m':'#485060'};
+function drawRover(sx,sy,blink){
+  if(blink&&(fr%8<4))return;
+  for(let r=0;r<RD.length;r++){let line=RD[r];for(let c=0;c<line.length;c++){let ch=line[c];if(ch==='.'||!RC[ch])continue;px(sx+c,sy+r,RC[ch])}}
+  if(fr%20<15)px(sx+30,sy+7,'#40e868');
+  let ha=0.5+Math.sin(fr*0.04)*0.15;
+  CX.globalAlpha=ha;px(sx+1,sy+10,'#b0d8ff');px(sx+1,sy+11,'#b0d8ff');CX.globalAlpha=1;
+  let wr=fr%4;
+  if(wr<2){px(sx+7,sy+19,'#687080');px(sx+17,sy+19,'#687080');px(sx+27,sy+19,'#687080')}
+}
+const RKD=['......00000.....','....00ABBA00....','...0ABBCCBBa0...','..0ABCDDCCBA0...','.0ABCDDEEDCBA0..','.0BCDEEEEEDCB0..','0BCDEEEEEEDCBA0.','0BCDEEEEEDCBA0..','0BCDDDDCCBBA0...','.0BBCCBBBA00....','.00BBBBA000.....','...000000.......'];
+const RKC={'0':'#2a1e18','a':'#3a2e22','A':'#5a4838','B':'#6e5c48','C':'#887058','D':'#a08868','E':'#b89878'};
+function drawRockSprite(sx,sy){
+  for(let r=0;r<RKD.length;r++){let line=RKD[r];for(let c=0;c<line.length;c++){let ch=line[c];if(ch==='.'||!RKC[ch])continue;px(sx+c,sy+r,RKC[ch])}}
+}
+function drawCrystal(sx,sy){
+  let pulse=Math.sin(fr*0.07)*0.3+0.7;
+  CX.globalAlpha=0.08*pulse;CX.fillStyle='#ffd040';
+  CX.beginPath();CX.arc((sx+4)*PX,(sy+5)*PX,8*PX,0,6.28);CX.fill();CX.globalAlpha=1;
+  let shape=['...00...','..0YY0..','..0FY0..','.0YFFY0.','0YYFFYY0','0YFFFWY0','0YYFFYY0','.0YFFY0.','..0YF0..','..0YY0..','...00...'];
+  let ec={'0':'#806020','Y':'#d8a830','W':'#fff8c0','F':'#f0d050'};
+  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){let ch=shape[r][c];if(ch==='.'||!ec[ch])continue;px(sx+c,sy+r,ec[ch])}
+}
+function drawHeart(sx,sy,filled){
+  let c=filled?'#e04050':'#333';let h=filled?'#ff6878':'#444';
+  px(sx+1,sy,c);px(sx+2,sy,h);px(sx+4,sy,c);px(sx+5,sy,h);
+  for(let x2=0;x2<7;x2++)px(sx+x2,sy+1,x2<3?h:c);
+  for(let x2=0;x2<7;x2++)px(sx+x2,sy+2,c);
+  for(let x2=0;x2<7;x2++)px(sx+x2,sy+3,c);
+  for(let x2=1;x2<6;x2++)px(sx+x2,sy+4,c);
+  for(let x2=2;x2<5;x2++)px(sx+x2,sy+5,c);
+  px(sx+3,sy+6,c);
+}
+function drawWater(sx,sy,w){
+  for(let wy=0;wy<5;wy++)for(let wx=0;wx<w;wx++){
+    let dep=wy/5;let r=25+dep*12,g=50+dep*20,b=110+dep*50;
+    let shm=Math.sin((wx+fr*0.06)*0.4)*10*(1-dep);
+    px(sx+wx,sy+wy,`rgb(${r+shm*0.4|0},${g+shm*0.7|0},${Math.min(255,b+shm|0)})`);
+  }
+  CX.fillStyle='rgba(140,155,175,0.3)';CX.fillRect(sx*PX,sy*PX,w*PX,PX);
+}
+function drawMeteor(x,y){
+  let colors=['#ffffff','#fff8d0','#ffd890','#ffb050','#e07830','#a04818','#602810'];
+  for(let i=0;i<colors.length;i++){px(x-i*2,y+i,colors[i]);if(i<3)px(x-i*2-1,y+i,colors[i])}
+}
+let game={
+  rover:null,obstacles:[],crystals:[],ox:0,dist:0,
+  nextObs:80,nextCry:180,lives:3,stage:0,running:false,
+  invTimer:0,fact:''
+};
+const STAGES=[
+  {name:'Mare Tranquillitatis',target:1000,speed:1.0,obsMul:1.0,enMul:1.0,diff:'EASY'},
+  {name:'Oceanus Procellarum',target:2500,speed:1.2,obsMul:1.3,enMul:0.9,diff:'NORMAL'},
+  {name:'Crater Copernicus',target:4500,speed:1.4,obsMul:1.6,enMul:0.8,diff:'HARD'},
+  {name:'Far Side Darklands',target:7000,speed:1.6,obsMul:1.9,enMul:0.7,diff:'HARDER'},
+  {name:'South Pole Aitken',target:10000,speed:1.8,obsMul:2.2,enMul:0.6,diff:'EXTREME'},
+];
+const FACTS=[
+  "The Moon's gravity is only 1/6 of Earth's.",
+  "The Moon is 384,400 km from Earth.",
+  "One lunar day equals 29.5 Earth days.",
+  "The Moon has no atmosphere or wind.",
+  "Apollo 11 landed on July 20, 1969.",
+  "Moonquakes can last up to 30 minutes!",
+  "The Moon is drifting 3.8 cm away each year.",
+  "Lunar dust is razor-sharp and clingy.",
+  "There is ice at the lunar south pole.",
+  "The far side was first seen by Luna 3 in 1959.",
+  "Moon rocks are 3-4.5 billion years old.",
+  "You'd weigh 6x less on the Moon!",
+];
+function startGame(){
+  let st=STAGES[game.stage];
+  game.rover={x:55,y:0,vy:0,onGround:true,boost:100};
+  game.rover.y=getGroundY(game.rover.x,0)-22;
+  game.obstacles=[];game.crystals=[];game.ox=0;game.dist=0;
+  game.nextObs=80;game.nextCry=180;game.lives=3;game.running=true;game.invTimer=0;
+}
+function doJump(){
+  if(!game.running)return;
+  let r=game.rover;
+  if(r.onGround){
+    r.vy=-2.8;r.onGround=false;
+  }else if(game.rover.boost>=20){
+    r.vy=-2.0;game.rover.boost-=20;
+  }
+}
+function update(){
+  if(state!=='play'||!game.running)return;
+  let st=STAGES[game.stage];
+  let spd=1.5*st.speed;
+  let r=game.rover;
+  r.vy+=0.08;
+  if(r.vy>2.0)r.vy=2.0;
+  r.y+=r.vy;
+  let groundY=getGroundY(r.x+19,game.ox)-22;
+  if(r.y>=groundY){r.y=groundY;r.vy=0;r.onGround=true}else{r.onGround=false}
+  game.ox+=spd;
+  game.dist+=spd/8;
+  if(r.onGround&&r.boost<100)r.boost=Math.min(100,r.boost+0.3);
+  if(game.invTimer>0)game.invTimer--;
+  game.nextObs--;
+  if(game.nextObs<=0){
+    let types=['rock','rock','water','crater'];
+    let type=types[Math.floor(Math.random()*types.length)];
+    let gy=getGroundY(GW+10,game.ox);
+    let obs;
+    if(type==='rock'){obs={type,x:GW+10,y:gy-12,w:16,h:12}}
+    else if(type==='water'){obs={type,x:GW+10,y:gy-2,w:22,h:5}}
+    else{obs={type,x:GW+10,y:gy-6,w:18,h:8}}
+    game.obstacles.push(obs);
+    game.nextObs=Math.max(50,Math.floor(130/st.obsMul)+Math.random()*40);
+  }
+  game.nextCry--;
+  if(game.nextCry<=0){
+    let gy=getGroundY(GW+10,game.ox);
+    game.crystals.push({x:GW+10,y:gy-30-Math.random()*15});
+    game.nextCry=Math.max(100,Math.floor(250/st.enMul)+Math.random()*60);
+  }
+  let rHit={x:r.x+5,y:r.y+8,w:28,h:12};
+  for(let i=game.obstacles.length-1;i>=0;i--){
+    let o=game.obstacles[i];
+    o.x-=spd;
+    if(o.x<-30){game.obstacles.splice(i,1);continue}
+    if(game.invTimer<=0&&o.x<rHit.x+rHit.w&&o.x+o.w>rHit.x&&o.y<rHit.y+rHit.h&&o.y+o.h>rHit.y){
+      game.lives--;game.invTimer=120;
+      if(game.lives<=0){
+        game.running=false;
+        data.cumDist+=game.dist;data.best=Math.max(data.best,game.dist);
+        if(data.cumDist>=5000)data.unlocked.c=true;
+        if(data.cumDist>=15000)data.unlocked.p=true;
+        game.fact=FACTS[Math.floor(Math.random()*FACTS.length)];
+        state='over';
+      }
+    }
+  }
+  for(let i=game.crystals.length-1;i>=0;i--){
+    let c=game.crystals[i];
+    c.x-=spd;
+    if(c.x<-15){game.crystals.splice(i,1);continue}
+    if(c.x<rHit.x+rHit.w&&c.x+8>rHit.x&&c.y<rHit.y+rHit.h&&c.y+11>rHit.y){
+      r.boost=Math.min(100,r.boost+25);game.crystals.splice(i,1);
+    }
+  }
+  if(game.dist>=st.target){
+    game.running=false;
+    data.cumDist+=game.dist;data.best=Math.max(data.best,game.dist);
+    if(data.cumDist>=5000)data.unlocked.c=true;
+    if(data.cumDist>=15000)data.unlocked.p=true;
+    if(game.stage<4)state='clear';else state='victory';
+  }
+}
+function renderTitle(){
+  drawSky();drawNebula(fr*0.2);drawStars(fr*0.25);
+  drawPlanet(255,25,6,180,120,220,true);
+  drawPlanet(280,45,4,220,180,100,false);
+  drawPlanet(40,38,3,180,100,100,false);
+  drawEarth(45,70,10);
+  drawMoon(210,55,35);
+  drawGround(fr*0.1);
+  for(let i=0;i<30;i++){let tx=68-i;if(tx<0)continue;
+    let ty=getGroundY(tx,fr*0.1)-1;
+    CX.globalAlpha=0.12*(1-i/30);px(tx,ty,'#7a6850');px(tx,ty+2,'#7a6850');CX.globalAlpha=1;
+  }
+  let rgy=getGroundY(68+19,fr*0.1)-22+Math.sin(fr*0.04)*0.5;
+  drawRover(68,rgy|0,false);
+  CX.save();CX.shadowColor='rgba(240,230,200,0.25)';CX.shadowBlur=PX*6;
+  txt('MOON',GW/2*PX+30*PX,38*PX,PX*14,'#f0ece0','center');
+  CX.shadowColor='rgba(160,190,230,0.25)';
+  txt('RUNNER',GW/2*PX+30*PX,52*PX,PX*14,'#a0b8e0','center');
+  CX.restore();
+  txt('A LUNAR EXPLORATION ADVENTURE',GW/2*PX+30*PX,66*PX,PX*4,'rgba(170,165,200,0.6)','center');
+  let blink=Math.sin(fr*0.04)*0.5+0.5;
+  CX.globalAlpha=blink;txt('TAP TO START',GW/2*PX,(GH-14)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
+}
+function renderSelect(){
+  drawSky();drawStars(fr*0.06);
+  txt('SELECT ROVER',GW/2*PX,12*PX,PX*7,'#e0dcd0','center');
+  let rovers=[
+    {key:'s',name:'SOJOURNER',desc:'Lightweight Scout',unlocked:data.unlocked.s,req:0,spd:0.6,arm:0.4,bst:0.8},
+    {key:'c',name:'CURIOSITY',desc:'All-Terrain Explorer',unlocked:data.unlocked.c,req:5000,spd:0.75,arm:0.6,bst:0.65},
+    {key:'p',name:'PERSEVERANCE',desc:'Heavy Science Unit',unlocked:data.unlocked.p,req:15000,spd:0.9,arm:0.8,bst:0.5},
+  ];
+  selectCards=[];
+  for(let i=0;i<3;i++){
+    let rv=rovers[i];
+    let cx=53+i*76,cl=cx-32,ct=26,cw=64,ch=130;
+    let isSel=rv.unlocked&&i===selIdx;
+    CX.fillStyle=isSel?'rgba(120,100,200,0.25)':rv.unlocked?'rgba(90,80,150,0.15)':'rgba(50,45,80,0.08)';
+    CX.fillRect(cl*PX,ct*PX,cw*PX,ch*PX);
+    CX.strokeStyle=isSel?'rgba(224,192,64,0.7)':rv.unlocked?'rgba(170,160,230,0.4)':'rgba(110,100,150,0.18)';
+    CX.lineWidth=isSel?PX*2:PX;CX.strokeRect(cl*PX,ct*PX,cw*PX,ch*PX);
+    if(rv.unlocked){
+      let bob=Math.sin(fr*0.025+i*1.5)*1;
+      drawRover(cx-19,(57+bob)|0,false);
+    }else{
+      CX.fillStyle='#101018';CX.fillRect((cx-12)*PX,57*PX,24*PX,18*PX);
+      txt('?',cx*PX,62*PX,PX*10,'#303050','center');
+    }
+    txt(rv.name,cx*PX,82*PX,PX*4,rv.unlocked?'#e0dcd0':'#404060','center');
+    txt(rv.desc,cx*PX,89*PX,PX*3,'#8080a8','center');
+    txt(rv.unlocked?'UNLOCKED':rv.req+'m REQ',cx*PX,96*PX,PX*3,rv.unlocked?'#50c870':'#a05858','center');
+    if(rv.unlocked){
+      let stats=[['SPD',rv.spd,'#50c0f0'],['ARM',rv.arm,'#e0c040'],['BST',rv.bst,'#50e080']];
+      for(let s=0;s<3;s++){
+        let sy=105+s*7;
+        txt(stats[s][0],(cl+3)*PX,sy*PX,PX*2.5,'#8080a0','left');
+        CX.fillStyle='rgba(100,90,150,0.2)';CX.fillRect((cl+14)*PX,sy*PX,35*PX,3*PX);
+        CX.fillStyle=stats[s][2];CX.fillRect((cl+14)*PX,sy*PX,Math.floor(35*stats[s][1])*PX,3*PX);
+      }
+    }
+    selectCards.push({x:cl,y:ct,w:cw,h:ch,key:rv.key,unlocked:rv.unlocked});
+  }
+  txt('TOTAL: '+Math.floor(data.cumDist)+' m',GW/2*PX,(GH-20)*PX,PX*4.5,'#e0c040','center');
+  txt('\u2190 \u2192 SELECT   SPACE START',GW/2*PX,(GH-10)*PX,PX*3,'rgba(170,165,200,0.5)','center');
+}
+function renderPlay(){
+  drawSky();drawNebula(game.ox);drawStars(game.ox);
+  drawPlanet(((250-game.ox*0.015)%350+350)%350,28,5,180,130,220,true);
+  drawEarth(((280-game.ox*0.008)%400+400)%400,40,8);
+  if(fr%280<45)drawMeteor(50+(fr%280)*2,12+(fr%280));
+  drawGround(game.ox);
+  for(let c of game.crystals)drawCrystal(c.x|0,c.y|0);
+  for(let o of game.obstacles){
+    if(o.type==='rock')drawRockSprite(o.x|0,o.y|0);
+    else if(o.type==='water')drawWater(o.x|0,o.y|0,o.w);
+    else{CX.fillStyle='#3a2e22';CX.beginPath();CX.ellipse((o.x+o.w/2)*PX,(o.y+o.h/2)*PX,(o.w/2)*PX,(o.h/2.5)*PX,0,0,6.28);CX.fill();CX.fillStyle='#5a4e3e';CX.beginPath();CX.ellipse((o.x+o.w/2)*PX,(o.y+1)*PX,(o.w/2)*PX,2*PX,0,0,6.28);CX.fill()}
+  }
+  if(game.rover.onGround)for(let i=0;i<4;i++){
+    let dx=game.rover.x-2-i*3-(fr%12);
+    let dy=getGroundY(dx,game.ox)-1;
+    if(dx>0){CX.globalAlpha=0.3-i*0.07;px(dx|0,dy|0,'#a09080');CX.globalAlpha=1}
+  }
+  drawRover(game.rover.x,game.rover.y|0,game.invTimer>0);
+  CX.fillStyle='rgba(8,8,25,0.55)';CX.fillRect(0,0,SW,13*PX);
+  for(let i=0;i<3;i++)drawHeart(3+i*9,3,i<game.lives);
+  let st=STAGES[game.stage];
+  txt('AREA '+(game.stage+1),32*PX,3*PX,PX*4,'#b0b8d8','left');
+  txt(Math.floor(game.dist)+'m',(GW-4)*PX,3*PX,PX*5,'#e0c040','right');
+  let prog=Math.min(1,game.dist/st.target);
+  CX.fillStyle='rgba(120,110,170,0.18)';CX.fillRect(32*PX,9*PX,(GW-75)*PX,2.5*PX);
+  CX.fillStyle='rgba(80,200,120,0.6)';CX.fillRect(32*PX,9*PX,Math.floor((GW-75)*prog)*PX,2.5*PX);
+  CX.fillStyle='rgba(8,8,25,0.5)';CX.fillRect(2*PX,(GH-55)*PX,6*PX,42*PX);
+  CX.strokeStyle='rgba(120,110,170,0.2)';CX.lineWidth=1;CX.strokeRect(2*PX,(GH-55)*PX,6*PX,42*PX);
+  let bl=game.rover.boost/100;let bh=Math.floor(38*bl);
+  let bGr=CX.createLinearGradient(0,(GH-55+(38-bh)+2)*PX,0,(GH-15)*PX);
+  bGr.addColorStop(0,'#50c0f8');bGr.addColorStop(1,'#2868b8');
+  CX.fillStyle=bGr;CX.fillRect(3*PX,(GH-55+(38-bh)+2)*PX,4*PX,bh*PX);
+  txt('BST',5*PX,(GH-58)*PX,PX*2.5,'#8888c0','center');
+  if(game.dist<60){
+    let a=Math.max(0,1-game.dist/60);
+    CX.globalAlpha=a*0.7;
+    txt('TAP / SPACE TO JUMP',GW/2*PX,(GH/2+10)*PX,PX*5,'#e0c040','center');
+    CX.globalAlpha=1;
+  }
+}
+function renderOver(){
+  drawSky();drawStars(fr*0.03);
+  drawMoon(GW/2,35,25);
+  CX.save();CX.shadowColor='rgba(210,130,130,0.3)';CX.shadowBlur=PX*4;
+  txt('MISSION ENDED',GW/2*PX,72*PX,PX*9,'#d0a8a8','center');CX.restore();
+  txt('DISTANCE: '+Math.floor(game.dist)+' m',GW/2*PX,90*PX,PX*5,'#b0b8d8','center');
+  txt('BEST: '+Math.floor(data.best)+' m',GW/2*PX,100*PX,PX*5,'#e0c040','center');
+  CX.fillStyle='rgba(12,10,30,0.4)';CX.fillRect(25*PX,112*PX,(GW-50)*PX,35*PX);
+  CX.strokeStyle='rgba(150,140,200,0.2)';CX.lineWidth=PX;CX.strokeRect(25*PX,112*PX,(GW-50)*PX,35*PX);
+  txt('\u2014 LUNAR FACT \u2014',GW/2*PX,116*PX,PX*3.5,'#e0c040','center');
+  let words=game.fact.split(' '),line='',ly=128;
+  for(let w of words){
+    let test=line+w+' ';
+    if(CX.measureText&&test.length>38){txt(line.trim(),GW/2*PX,ly*PX,PX*3.5,'#c0b8d0','center');ly+=7;line=w+' '}else line=test;
+  }
+  txt(line.trim(),GW/2*PX,ly*PX,PX*3.5,'#c0b8d0','center');
+  CX.strokeStyle='#e0c040';CX.lineWidth=PX*1.5;CX.beginPath();CX.arc(GW/2*PX,165*PX,8*PX,0,6.28);CX.stroke();
+  txt('\u2605',GW/2*PX,162*PX,PX*5,'#e0c040','center');
+  let blink=Math.sin(fr*0.04)*0.5+0.5;
+  CX.globalAlpha=blink;txt('TAP TO RETRY',GW/2*PX,(GH-12)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
+}
+function renderClear(){
+  drawSky();drawStars(fr*0.05);drawMoon(GW/2,40,30);
+  CX.save();CX.shadowColor='rgba(240,200,60,0.3)';CX.shadowBlur=PX*6;
+  txt('STAGE CLEAR!',GW/2*PX,80*PX,PX*10,'#e0c040','center');CX.restore();
+  txt(STAGES[game.stage].name,GW/2*PX,100*PX,PX*5,'#b0b8d8','center');
+  txt(Math.floor(game.dist)+' m',GW/2*PX,112*PX,PX*5,'#e0c040','center');
+  CX.fillStyle='#e0c040';CX.beginPath();CX.arc(GW/2*PX,140*PX,12*PX,0,6.28);CX.fill();
+  CX.strokeStyle='#fff';CX.lineWidth=PX;CX.stroke();
+  txt(''+(game.stage+1),GW/2*PX,136*PX,PX*7,'#1a1520','center');
+  let blink=Math.sin(fr*0.04)*0.5+0.5;
+  CX.globalAlpha=blink;txt('TAP TO CONTINUE',GW/2*PX,(GH-12)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
+}
+function renderVictory(){
+  drawSky();drawStars(fr*0.04);drawMoon(GW/2,40,30);
+  CX.save();CX.shadowColor='rgba(80,200,120,0.3)';CX.shadowBlur=PX*6;
+  txt('MISSION COMPLETE!',GW/2*PX,78*PX,PX*8,'#50c878','center');CX.restore();
+  txt('All 5 areas conquered!',GW/2*PX,98*PX,PX*5,'#e0dcd0','center');
+  txt('Total: '+Math.floor(data.cumDist)+' m',GW/2*PX,112*PX,PX*5,'#e0c040','center');
+  CX.fillStyle='#e0c040';CX.beginPath();CX.arc(GW/2*PX,142*PX,14*PX,0,6.28);CX.fill();
+  txt('\u2605',GW/2*PX,138*PX,PX*7,'#1a1520','center');
+  let blink=Math.sin(fr*0.04)*0.5+0.5;
+  CX.globalAlpha=blink;txt('TAP TO RETURN',GW/2*PX,(GH-12)*PX,PX*5,'#50c878','center');CX.globalAlpha=1;
+}
+let jumpQueued=false;
+function handleInput(cx,cy){
+  if(state==='title'){state='select';return}
+  if(state==='select'){
+    let rect=CV.getBoundingClientRect();
+    let scaleX=SW/rect.width,scaleY=SH/rect.height;
+    let mx=(cx-rect.left)*scaleX/PX, my=(cy-rect.top)*scaleY/PX;
+    for(let c of selectCards){
+      if(c.unlocked&&mx>=c.x&&mx<c.x+c.w&&my>=c.y&&my<c.y+c.h){
+        data.rover=c.key;game.stage=0;startGame();state='play';return;
+      }
+    }
+    return;
+  }
+  if(state==='play'){doJump();return}
+  if(state==='over'){state='select';return}
+  if(state==='clear'){game.stage++;startGame();state='play';return}
+  if(state==='victory'){game.stage=0;state='title';return}
+}
+CV.addEventListener('pointerdown',e=>{e.preventDefault();handleInput(e.clientX,e.clientY)});
+let selIdx=0;
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='ArrowUp'){
+    e.preventDefault();
+    if(state==='play')doJump();
+    else if(state==='select'){
+      let unlocked=selectCards.filter(c=>c.unlocked);
+      if(unlocked.length>0){let c=unlocked[Math.min(selIdx,unlocked.length-1)];data.rover=c.key;game.stage=0;startGame();state='play';}
+    }
+    else handleInput(0,0);
+  }
+  if(state==='select'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){
+    e.preventDefault();
+    let unlocked=selectCards.filter(c=>c.unlocked);
+    if(e.code==='ArrowLeft')selIdx=Math.max(0,selIdx-1);
+    else selIdx=Math.min(unlocked.length-1,selIdx+1);
+  }
+});
+function loop(){
+  fr++;
+  CX.clearRect(0,0,SW,SH);
+  update();
+  if(state==='title')renderTitle();
+  else if(state==='select')renderSelect();
+  else if(state==='play')renderPlay();
+  else if(state==='over')renderOver();
+  else if(state==='clear')renderClear();
+  else if(state==='victory')renderVictory();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
