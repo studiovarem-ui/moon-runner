@@ -1,509 +1,1087 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-<title>Moon Runner</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#08081a;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
-canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moon Runner - Lunar Rover Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: #000;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      border: 2px solid #333;
+      image-rendering: crisp-edges;
+      touch-action: none;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-<canvas id="g"></canvas>
-<script>
-const CV=document.getElementById('g'),CX=CV.getContext('2d');
-const PX=3,GW=320,GH=214,SW=GW*PX,SH=GH*PX;
-CV.width=SW;CV.height=SH;
-function resize(){
-  let s=Math.min(window.innerWidth/SW,window.innerHeight/SH);
-  CV.style.width=SW*s+'px';CV.style.height=SH*s+'px';
+  <canvas id="canvas"></canvas>
+
+  <script>
+const canvas = document.getElementById('canvas');
+const cx = canvas.getContext('2d');
+
+// Canvas setup: 420x746 portrait
+canvas.width = 420;
+canvas.height = 746;
+
+// Resize to fit viewport
+function resizeCanvas() {
+  const maxW = window.innerWidth - 20;
+  const maxH = window.innerHeight - 20;
+  const scale = Math.min(maxW / 420, maxH / 746);
+  canvas.style.width = (420 * scale) + 'px';
+  canvas.style.height = (746 * scale) + 'px';
 }
-window.addEventListener('resize',resize);resize();
-function px(x,y,c){CX.fillStyle=c;CX.fillRect(Math.floor(x)*PX,Math.floor(y)*PX,PX,PX)}
-function txt(t,x,y,sz,col,al){CX.fillStyle=col||'#fff';CX.font=`bold ${sz}px monospace`;CX.textAlign=al||'left';CX.textBaseline='top';CX.fillText(t,x,y)}
-let state='title';
-let fr=0;
-let selectCards=[];
-let data={best:0,cumDist:0,unlocked:{s:true,c:false,p:false},rover:'s'};
-let stars=[];
-for(let i=0;i<350;i++)stars.push({x:Math.random()*GW*2,y:Math.random()*GH*0.62,sz:Math.random()<0.06?2:1,b:0.3+Math.random()*0.7,tw:Math.random()*6.28,ts:0.005+Math.random()*0.02,h:Math.random()<0.1?1:Math.random()<0.18?2:0});
-function drawStars(ox){
-  for(let s of stars){
-    let sx=((s.x-ox*0.05)%GW+GW)%GW;
-    let tw=Math.sin(fr*s.ts+s.tw);
-    let a=s.b*(0.55+tw*0.45);if(a<0.1)continue;
-    let c=s.h===1?(a>0.5?'#ffccaa':'#aa8866'):s.h===2?(a>0.5?'#aaccff':'#6688aa'):(a>0.5?'#ffffff':'#999999');
-    px(sx,s.y,c);if(s.sz>=2){px(sx+1,s.y,c);px(sx,s.y+1,c)}
-  }
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// Drawing helpers
+function pill(cx, x, y, w, h, r, fill, stroke, lw) {
+  cx.fillStyle = fill;
+  cx.strokeStyle = stroke;
+  cx.lineWidth = lw || 1;
+  cx.beginPath();
+  cx.roundRect(x, y, w, h, r);
+  cx.fill();
+  if (stroke) cx.stroke();
 }
-function drawNebula(ox){
-  CX.globalAlpha=0.06;
-  for(let i=0;i<15;i++){
-    let nx=((i*23-ox*0.01)%GW+GW)%GW;
-    CX.fillStyle=['#301848','#201060','#1a2858'][i%3];
-    CX.fillRect(nx*PX,(20+Math.sin(i*2.3)*30)*PX,(10+Math.sin(i*1.7)*8)*PX,(5+Math.sin(i*3.1)*4)*PX);
-  }
-  CX.globalAlpha=1;
+
+function circle(cx, x, y, r, fill, stroke, lw) {
+  cx.fillStyle = fill;
+  cx.strokeStyle = stroke;
+  cx.lineWidth = lw || 1;
+  cx.beginPath();
+  cx.arc(x, y, r, 0, Math.PI * 2);
+  cx.fill();
+  if (stroke) cx.stroke();
 }
-function drawSky(){
-  for(let y=0;y<GH;y++){
-    let t=y/GH;
-    CX.fillStyle=`rgb(${12+t*18|0},${8+t*22|0},${30+t*50|0})`;
-    CX.fillRect(0,y*PX,SW,PX);
+
+function drawCuteStar(cx, x, y, r, color, outColor) {
+  cx.fillStyle = color;
+  cx.strokeStyle = outColor;
+  cx.lineWidth = 2;
+  cx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * Math.PI) / 5 - Math.PI / 2;
+    const rad = i % 2 === 0 ? r : r * 0.4;
+    const px = x + Math.cos(angle) * rad;
+    const py = y + Math.sin(angle) * rad;
+    if (i === 0) cx.moveTo(px, py);
+    else cx.lineTo(px, py);
   }
+  cx.closePath();
+  cx.fill();
+  cx.stroke();
 }
-function drawPlanet(cx,cy,r,br,bg,bb,ring){
-  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
-    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
-    let nz=Math.sqrt(Math.max(0,1-(dx/r)**2-(dy/r)**2));
-    let sh=Math.max(0.12,(-dx/r)*0.25+(-dy/r)*0.4+nz*0.85)*(1-Math.pow(d/r,3)*0.5);
-    let band=Math.sin(dy/r*4+dx/r*0.5)*0.15;
-    px(cx+dx,cy+dy,`rgb(${Math.min(255,br*sh*(1+band)|0)},${Math.min(255,bg*sh*(1+band)|0)},${Math.min(255,bb*sh*(1+band)|0)})`);
-  }
-  if(ring)for(let rx=-r*2;rx<=r*2;rx++){
-    let ry=Math.floor(rx*0.25);
-    if(Math.abs(Math.sqrt(rx*rx+ry*ry*4)-r*1.5)>2)continue;
-    if(Math.abs(rx)<r&&Math.abs(ry)<2)continue;
-    px(cx+rx,cy+ry,'rgba(200,180,150,0.3)');
-  }
-}
-function drawEarth(cx,cy,r){
-  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
-    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
-    let nz=Math.sqrt(Math.max(0,1-(dx/r)**2-(dy/r)**2));
-    let sh=Math.max(0.15,(-dx/r)*0.3+(-dy/r)*0.5+nz*0.8)*(1-Math.pow(d/r,3)*0.4);
-    let land=Math.sin(dx*0.5+1)*Math.sin(dy*0.6+2)>0.1;
-    let R,G,B;
-    if(land){R=50+sh*80;G=120+sh*130;B=60+sh*50}else{R=30+sh*60;G=60+sh*100;B=140+sh*120}
-    if(Math.sin(dx*0.8+fr*0.004)*Math.sin(dy*0.7)>0.35){R+=50*sh;G+=50*sh;B+=50*sh}
-    px(cx+dx,cy+dy,`rgb(${Math.min(255,R|0)},${Math.min(255,G|0)},${Math.min(255,B|0)})`);
-  }
-}
-function drawMoon(cx,cy,r){
-  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
-    let d=Math.sqrt(dx*dx+dy*dy);if(d>r)continue;
-    let nx=dx/r,ny=dy/r,nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
-    let sh=Math.max(0.15,nx*(-0.2)+ny*(-0.45)+nz*0.8)*(1-Math.pow(d/r,4)*0.55);
-    let base=145+sh*95;
-    if(Math.sin(dx*0.09)*Math.sin(dy*0.07+0.3)+Math.sin(dx*0.15)*0.25>0.2)base-=28;
-    let craters=[[0.3,-0.35,0.13],[-0.38,0.2,0.1],[0.1,0.38,0.08],[-0.2,-0.18,0.07]];
-    for(let c of craters){let cd=Math.sqrt((nx-c[0])**2+(ny-c[1])**2);if(cd<c[2])base-=18*(1-cd/c[2]);else if(cd<c[2]*1.35)base+=10}
-    base=Math.max(85,Math.min(245,base));
-    px(cx+dx,cy+dy,`rgb(${base+5|0},${base+2|0},${base-4|0})`);
-  }
-}
-function getGroundY(x,ox){
-  let mx=x+(ox||0)*0.6;
-  return GH-38+Math.sin(mx*0.007)*5+Math.sin(mx*0.02)*3+Math.sin(mx*0.055)*1.5;
-}
-function drawGround(ox){
-  let baseY=GH-38;
-  for(let x=0;x<GW;x++){
-    let mx=x+ox*0.08;
-    let h=Math.sin(mx*0.012)*14+Math.sin(mx*0.03)*6+22;
-    let top=baseY-h;
-    for(let y=Math.max(0,top|0);y<baseY;y++){
-      let dep=(y-top)/Math.max(1,h);let s=32+dep*22;
-      px(x,y,`rgb(${s+10|0},${s+5|0},${s+18|0})`);
-    }
-  }
-  for(let x=0;x<GW;x++){
-    let mx=x+ox*0.2;
-    let h=Math.sin(mx*0.008)*10+Math.sin(mx*0.025)*5+15;
-    let top=baseY-h;
-    for(let y=Math.max(0,top|0);y<baseY;y++){
-      let dep=(y-top)/Math.max(1,h);let s=45+dep*20;
-      px(x,y,`rgb(${s+8|0},${s+2|0},${s+6|0})`);
-    }
-  }
-  for(let x=0;x<GW;x++){
-    let surfY=getGroundY(x,ox);
-    for(let y=Math.floor(surfY);y<GH;y++){
-      let dep=y-surfY;
-      let base=dep<1?175:dep<2?155:dep<5?135:dep<12?115-dep*0.6:100-dep*0.3;
-      let tex=Math.sin(x*1.8+y*1.3)*5+Math.sin(x*0.5+y*2.5)*3;
-      let r=base+tex+12,g=base+tex+5,b=base+tex-10;
-      px(x,y,`rgb(${Math.max(35,Math.min(215,r|0))},${Math.max(30,Math.min(210,g|0))},${Math.max(22,Math.min(200,b|0)})`);
-    }
-  }
-}
-const RD=[
-'......................................',
-'......0..........00000...............',
-'.....0c0........0aadda0.............',
-'.....0c0........0adcda0.............',
-'.....010........0aadda0.............',
-'.....010.........00000...............',
-'.....010....00000000000000000........',
-'..0000100000ggggggggggggggggg00......',
-'.0LLb0100ggghhhhhhhhhhhhhhhhggg0...0.',
-'.0Lb00000gghiiiiiiiiiiiiiiiiiihg0..00',
-'0eee0..0gghijjjjjjjjjjjjjjjjihg0.0r0',
-'0ee0..0gghijjkkjjjkkjjjkkjjjjihg00rr0',
-'0ee0.0gghijjkPPkjkPPkjkPPkjjjihg0rr0',
-'0ee0.0gghijjkkjjjkkjjjkkjjjjjihg0rr0',
-'0000.0gghiiiiiiiiiiiiiiiiiiiiiihg00000',
-'.....0gghhhhhhhhhhhhhhhhhhhhhhhhg0....',
-'.....0gggggggggggggggggggggggggg0....',
-'......00..0000........0000..00.......',
-'.....0WW00MWWM0......0MWWM00WW0.....',
-'....0WwwW0MwmmM0....0MwmmM0WwwW0....',
-'....0WwwW0MmwmM0....0MmwmM0WwwW0....',
-'.....0WW00MWWM0......0MWWM00WW0.....',
+
+// Game stages
+const stages = [
+  { name: 'Mare Tranquillitatis', sub: '고요의 바다', target: 1000, speed: 1.0, obsMul: 1.0, enMul: 1.0, diff: 'EASY', color: '#60d060' },
+  { name: 'Oceanus Procellarum', sub: '폭풍의 대양', target: 2500, speed: 1.15, obsMul: 1.3, enMul: 0.9, diff: 'NORMAL', color: '#50a0ff' },
+  { name: 'Crater Copernicus', sub: '코페르니쿠스 분화구', target: 4500, speed: 1.3, obsMul: 1.6, enMul: 0.8, diff: 'HARD', color: '#ffa030' },
+  { name: 'Far Side Darklands', sub: '달의 뒷면', target: 7000, speed: 1.45, obsMul: 1.9, enMul: 0.7, diff: 'HARDER', color: '#e050a0' },
+  { name: 'South Pole Aitken', sub: '남극 에이트킨 분지', target: 10000, speed: 1.6, obsMul: 2.2, enMul: 0.6, diff: 'EXTREME', color: '#ff4050' },
 ];
-const RC={'0':'#1a1520','1':'#606878','a':'#8898a8','d':'#a0b0c0','c':'#b8c8d8','g':'#505860','h':'#788898','i':'#a0b0b8','j':'#c8d0d8','k':'#889098','P':'#3058a0','e':'#786048','L':'#50b8f0','b':'#607080','r':'#708898','W':'#404850','M':'#303840','w':'#586878','m':'#485060'};
-function drawRover(sx,sy,blink){
-  if(blink&&(fr%8<4))return;
-  for(let r=0;r<RD.length;r++){let line=RD[r];for(let c=0;c<line.length;c++){let ch=line[c];if(ch==='.'||!RC[ch])continue;px(sx+c,sy+r,RC[ch])}}
-  if(fr%20<15)px(sx+30,sy+7,'#40e868');
-  let ha=0.5+Math.sin(fr*0.04)*0.15;
-  CX.globalAlpha=ha;px(sx+1,sy+10,'#b0d8ff');px(sx+1,sy+11,'#b0d8ff');CX.globalAlpha=1;
-  let wr=fr%4;
-  if(wr<2){px(sx+7,sy+19,'#687080');px(sx+17,sy+19,'#687080');px(sx+27,sy+19,'#687080')}
-}
-const RKD=['......00000.....','....00ABBA00....','...0ABBCCBBa0...','..0ABCDDCCBA0...','.0ABCDDEEDCBA0..','.0BCDEEEEEDCB0..','0BCDEEEEEEDCBA0.','0BCDEEEEEDCBA0..','0BCDDDDCCBBA0...','.0BBCCBBBA00....','.00BBBBA000.....','...000000.......'];
-const RKC={'0':'#2a1e18','a':'#3a2e22','A':'#5a4838','B':'#6e5c48','C':'#887058','D':'#a08868','E':'#b89878'};
-function drawRockSprite(sx,sy){
-  for(let r=0;r<RKD.length;r++){let line=RKD[r];for(let c=0;c<line.length;c++){let ch=line[c];if(ch==='.'||!RKC[ch])continue;px(sx+c,sy+r,RKC[ch])}}
-}
-function drawCrystal(sx,sy){
-  let pulse=Math.sin(fr*0.07)*0.3+0.7;
-  CX.globalAlpha=0.08*pulse;CX.fillStyle='#ffd040';
-  CX.beginPath();CX.arc((sx+4)*PX,(sy+5)*PX,8*PX,0,6.28);CX.fill();CX.globalAlpha=1;
-  let shape=['...00...','..0YY0..','..0FY0..','.0YFFY0.','0YYFFYY0','0YFFFWY0','0YYFFYY0','.0YFFY0.','..0YF0..','..0YY0..','...00...'];
-  let ec={'0':'#806020','Y':'#d8a830','W':'#fff8c0','F':'#f0d050'};
-  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){let ch=shape[r][c];if(ch==='.'||!ec[ch])continue;px(sx+c,sy+r,ec[ch])}
-}
-function drawHeart(sx,sy,filled){
-  let c=filled?'#e04050':'#333';let h=filled?'#ff6878':'#444';
-  px(sx+1,sy,c);px(sx+2,sy,h);px(sx+4,sy,c);px(sx+5,sy,h);
-  for(let x2=0;x2<7;x2++)px(sx+x2,sy+1,x2<3?h:c);
-  for(let x2=0;x2<7;x2++)px(sx+x2,sy+2,c);
-  for(let x2=0;x2<7;x2++)px(sx+x2,sy+3,c);
-  for(let x2=1;x2<6;x2++)px(sx+x2,sy+4,c);
-  for(let x2=2;x2<5;x2++)px(sx+x2,sy+5,c);
-  px(sx+3,sy+6,c);
-}
-function drawWater(sx,sy,w){
-  for(let wy=0;wy<5;wy++)for(let wx=0;wx<w;wx++){
-    let dep=wy/5;let r=25+dep*12,g=50+dep*20,b=110+dep*50;
-    let shm=Math.sin((wx+fr*0.06)*0.4)*10*(1-dep);
-    px(sx+wx,sy+wy,`rgb(${r+shm*0.4|0},${g+shm*0.7|0},${Math.min(255,b+shm|0)})`);
-  }
-  CX.fillStyle='rgba(140,155,175,0.3)';CX.fillRect(sx*PX,sy*PX,w*PX,PX);
-}
-function drawMeteor(x,y){
-  let colors=['#ffffff','#fff8d0','#ffd890','#ffb050','#e07830','#a04818','#602810'];
-  for(let i=0;i<colors.length;i++){px(x-i*2,y+i,colors[i]);if(i<3)px(x-i*2-1,y+i,colors[i])}
-}
-let game={
-  rover:null,obstacles:[],crystals:[],ox:0,dist:0,
-  nextObs:80,nextCry:180,lives:3,stage:0,running:false,
-  invTimer:0,fact:''
+
+const lunarFacts = [
+  { title: 'GRAVITY', type: 'LUNAR FACT \u2022 PHYSICS', text: 'The Moon has 1/6th the gravity of Earth. A 180lb astronaut weighs only 30lb on the lunar surface!' },
+  { title: 'DUST', type: 'LUNAR FACT \u2022 MATERIAL', text: 'Moon dust is extremely abrasive and can damage equipment. Its particles are sharp and electrostatically charged.' },
+  { title: 'TEMPERATURE', type: 'LUNAR FACT \u2022 CLIMATE', text: 'Lunar surface temps swing from -173\u00b0C in shadow to 127\u00b0C in sunlight. Extreme conditions test rovers daily.' },
+  { title: 'CRATERS', type: 'LUNAR FACT \u2022 GEOLOGY', text: 'The Moon has over 300,000 craters larger than 1km. They reveal billions of years of cosmic impacts.' },
+  { title: 'ROTATION', type: 'LUNAR FACT \u2022 ASTRONOMY', text: 'The Moon is tidally locked to Earth. We always see the same face\u2014the far side remained unknown until 1959.' },
+  { title: 'WATER ICE', type: 'LUNAR FACT \u2022 DISCOVERY', text: 'In 2008, water ice was detected in lunar soil. Permanently shadowed craters at the poles hold ancient frozen water.' },
+  { title: 'REGOLITH', type: 'LUNAR FACT \u2022 GEOLOGY', text: "The Moon's surface layer is called regolith. It's ancient powdered rock created by billions of years of asteroid bombardment." },
+  { title: 'SEISMIC', type: 'LUNAR FACT \u2022 SCIENCE', text: 'Moonquakes occur regularly but are much weaker than earthquakes. The Moon is still slowly cooling and contracting.' },
+  { title: 'LAVA TUBES', type: 'LUNAR FACT \u2022 GEOLOGY', text: 'Massive lava tubes beneath the surface could shelter future lunar colonies from radiation and temperature extremes.' },
+  { title: 'HARVEST MOON', type: 'LUNAR FACT \u2022 CULTURE', text: "The Harvest Moon appears larger and brighter than usual. This optical illusion is due to our brain's size perception." },
+  { title: 'DARK SIDE', type: 'LUNAR FACT \u2022 MYSTERY', text: "The far side is actually brighter! It's called \"dark\" because we couldn't see it from Earth until satellites revealed it." },
+  { title: 'FORMATION', type: 'LUNAR FACT \u2022 HISTORY', text: 'Scientists believe the Moon formed 4.51 billion years ago when a Mars-sized object collided with young Earth.' },
+];
+
+// Game state
+const game = {
+  state: 'title',
+  canvas: canvas,
+  ox: 0,
+  vy: 0,
+  distance: 0,
+  bestDistance: 0,
+  roverId: 0,
+  stage: 0,
+  health: 3,
+  boost: 100,
+  fr: 0,
+  roverX: 80,
+  totalDistance: 0,
+  jumps: 0,
+  showJumpHint: 120,
 };
-const STAGES=[
-  {name:'Mare Tranquillitatis',target:1000,speed:1.0,obsMul:1.0,enMul:1.0,diff:'EASY'},
-  {name:'Oceanus Procellarum',target:2500,speed:1.2,obsMul:1.3,enMul:0.9,diff:'NORMAL'},
-  {name:'Crater Copernicus',target:4500,speed:1.4,obsMul:1.6,enMul:0.8,diff:'HARD'},
-  {name:'Far Side Darklands',target:7000,speed:1.6,obsMul:1.9,enMul:0.7,diff:'HARDER'},
-  {name:'South Pole Aitken',target:10000,speed:1.8,obsMul:2.2,enMul:0.6,diff:'EXTREME'},
+
+const rovers = [
+  { key: 'sojourner', name: 'SOJOURNER', color: '#f0d040', spd: 2, arm: 1, bst: 2, unlocked: true },
+  { key: 'curiosity', name: 'CURIOSITY', color: '#4090e0', spd: 3, arm: 3, bst: 1, unlocked: false },
+  { key: 'perseverance', name: 'PERSEVERANCE', color: '#e05030', spd: 2, arm: 4, bst: 3, unlocked: false },
 ];
-const FACTS=[
-  "The Moon's gravity is only 1/6 of Earth's.",
-  "The Moon is 384,400 km from Earth.",
-  "One lunar day equals 29.5 Earth days.",
-  "The Moon has no atmosphere or wind.",
-  "Apollo 11 landed on July 20, 1969.",
-  "Moonquakes can last up to 30 minutes!",
-  "The Moon is drifting 3.8 cm away each year.",
-  "Lunar dust is razor-sharp and clingy.",
-  "There is ice at the lunar south pole.",
-  "The far side was first seen by Luna 3 in 1959.",
-  "Moon rocks are 3-4.5 billion years old.",
-  "You'd weigh 6x less on the Moon!",
-];
-function startGame(){
-  let st=STAGES[game.stage];
-  game.rover={x:55,y:0,vy:0,onGround:true,boost:100};
-  game.rover.y=getGroundY(game.rover.x,0)-22;
-  game.obstacles=[];game.crystals=[];game.ox=0;game.dist=0;
-  game.nextObs=80;game.nextCry=180;game.lives=3;game.running=true;game.invTimer=0;
+
+// Draw rover helpers
+function drawSojourner(cx, x, y, scale) {
+  const s = scale;
+  // Body
+  pill(cx, x + 5*s, y + 10*s, 30*s, 12*s, 3*s, '#f0d040', '#d0a000', 2*s);
+  // Solar panel hat
+  pill(cx, x + 8*s, y + 5*s, 24*s, 4*s, 2*s, '#ffeb99', '#d0a000', 1*s);
+  // Antenna
+  circle(cx, x + 28*s, y + 3*s, 3*s, '#ff3030', '#a00000', 1*s);
+  cx.strokeStyle = '#b8a000';
+  cx.lineWidth = 2*s;
+  cx.beginPath();
+  cx.moveTo(x + 28*s, y + 8*s);
+  cx.lineTo(x + 28*s, y + 2*s);
+  cx.stroke();
+  // Wheels
+  circle(cx, x + 10*s, y + 23*s, 3*s, '#444', '#222', 1*s);
+  circle(cx, x + 20*s, y + 23*s, 3*s, '#444', '#222', 1*s);
+  circle(cx, x + 30*s, y + 23*s, 3*s, '#444', '#222', 1*s);
+  // Camera sensor (no eyes!)
+  pill(cx, x + 15*s, y + 10*s, 10*s, 4*s, 1*s, '#888', '#333', 1*s);
+  circle(cx, x + 18*s, y + 11*s, 1.5*s, '#aaa', '#333', 0.5*s);
 }
-function doJump(){
-  if(!game.running)return;
-  let r=game.rover;
-  if(r.onGround){
-    r.vy=-2.8;r.onGround=false;
-  }else if(game.rover.boost>=20){
-    r.vy=-2.0;game.rover.boost-=20;
+
+function drawCuriosity(cx, x, y, scale) {
+  const s = scale;
+  // Body
+  pill(cx, x + 5*s, y + 12*s, 35*s, 14*s, 3*s, '#4090e0', '#1050a0', 2*s);
+  // Mast
+  pill(cx, x + 19*s, y + 2*s, 6*s, 12*s, 2*s, '#666', '#333', 1*s);
+  // Mast camera (rectangular sensor, no eyes!)
+  pill(cx, x + 17*s, y + 0*s, 10*s, 5*s, 1*s, '#888', '#333', 1*s);
+  circle(cx, x + 20*s, y + 1*s, 1.5*s, '#aaa', '#333', 0.5*s);
+  // RTG cylinder
+  circle(cx, x + 37*s, y + 14*s, 4*s, '#ffa030', '#b86000', 1*s);
+  // Robot arm
+  cx.strokeStyle = '#555';
+  cx.lineWidth = 2*s;
+  cx.beginPath();
+  cx.moveTo(x + 35*s, y + 18*s);
+  cx.lineTo(x + 42*s, y + 12*s);
+  cx.stroke();
+  // Wheels
+  circle(cx, x + 10*s, y + 27*s, 3.5*s, '#333', '#222', 1*s);
+  circle(cx, x + 20*s, y + 27*s, 3.5*s, '#333', '#222', 1*s);
+  circle(cx, x + 32*s, y + 27*s, 3.5*s, '#333', '#222', 1*s);
+}
+
+function drawPerseverance(cx, x, y, scale) {
+  const s = scale;
+  // Armored body
+  pill(cx, x + 3*s, y + 10*s, 40*s, 16*s, 4*s, '#e05030', '#a03020', 2*s);
+  // SuperCam mast
+  pill(cx, x + 21*s, y - 2*s, 5*s, 14*s, 2*s, '#555', '#222', 1*s);
+  // Mast camera housing (rectangular sensor, no eyes!)
+  pill(cx, x + 18*s, y - 4*s, 11*s, 6*s, 1*s, '#777', '#333', 1*s);
+  circle(cx, x + 22*s, y - 2*s, 1.5*s, '#aaa', '#333', 0.5*s);
+  // Microphone ball
+  circle(cx, x + 23*s, y - 6*s, 2.5*s, '#ffcc00', '#b8a000', 1*s);
+  // Robot arm
+  cx.strokeStyle = '#555';
+  cx.lineWidth = 2*s;
+  cx.beginPath();
+  cx.moveTo(x + 40*s, y + 16*s);
+  cx.lineTo(x + 48*s, y + 10*s);
+  cx.stroke();
+  // Helicopter drone (simple body + rotor, NO face!)
+  circle(cx, x + 45*s, y + 5*s, 2*s, '#cccccc', '#666', 1*s);
+  cx.strokeStyle = '#666';
+  cx.lineWidth = 1.5*s;
+  cx.beginPath();
+  cx.moveTo(x + 43*s, y + 5*s);
+  cx.lineTo(x + 47*s, y + 5*s);
+  cx.stroke();
+  // Wheels
+  circle(cx, x + 8*s, y + 27*s, 4*s, '#222', '#000', 1*s);
+  circle(cx, x + 20*s, y + 27*s, 4*s, '#222', '#000', 1*s);
+  circle(cx, x + 35*s, y + 27*s, 4*s, '#222', '#000', 1*s);
+}
+
+function drawRover(cx, key, x, y, scale) {
+  if (key === 'sojourner') drawSojourner(cx, x, y, scale);
+  else if (key === 'curiosity') drawCuriosity(cx, x, y, scale);
+  else if (key === 'perseverance') drawPerseverance(cx, x, y, scale);
+}
+
+// Background drawing
+function drawBg() {
+  const grad = cx.createLinearGradient(0, 0, 0, 540);
+  grad.addColorStop(0, '#0a0428');
+  grad.addColorStop(1, '#302090');
+  cx.fillStyle = grad;
+  cx.fillRect(0, 0, 420, 540);
+
+  // Stars (twinkling)
+  cx.fillStyle = '#fff';
+  for (let i = 0; i < 50; i++) {
+    const sx = (i * 91) % 420;
+    const sy = (i * 73) % 400;
+    const twinkle = Math.sin(game.fr * 0.03 + i) * 0.5 + 0.5;
+    cx.globalAlpha = 0.3 + twinkle * 0.4;
+    cx.beginPath();
+    cx.arc(sx, sy, 1, 0, Math.PI * 2);
+    cx.fill();
+  }
+  cx.globalAlpha = 1;
+
+  // Earth (fixed position)
+  circle(cx, 60, 100, 25, '#4a90e2', '#2050a0', 2);
+  cx.fillStyle = '#4a90e2';
+  cx.beginPath();
+  cx.arc(55, 95, 5, 0, Math.PI * 2);
+  cx.fill();
+
+  // Saturn-like planet (fixed position)
+  circle(cx, 360, 130, 18, '#d4a574', '#8b6f47', 2);
+  cx.strokeStyle = '#8b6f47';
+  cx.lineWidth = 3;
+  cx.beginPath();
+  cx.arc(360, 130, 28, 0, Math.PI * 2);
+  cx.stroke();
+}
+
+// Ground drawing
+function drawGround() {
+  const stageSpeed = stages[game.stage].speed;
+  const scrollSpeed = 1.0 * stageSpeed;
+  const baseY = 540;
+  const ox = game.ox * 0.4;
+
+  // Mountain parallax 1 (10%)
+  cx.fillStyle = '#2a2060';
+  cx.beginPath();
+  cx.moveTo(0, baseY - 60);
+  for (let i = 0; i < 435; i++) {
+    const h = Math.sin((i + ox * 0.1) * 0.01) * 15 + 20;
+    cx.lineTo(i, baseY - 60 - h);
+  }
+  cx.lineTo(420, baseY);
+  cx.lineTo(0, baseY);
+  cx.closePath();
+  cx.fill();
+
+  // Mountain parallax 2 (20%)
+  cx.fillStyle = '#3a3080';
+  cx.beginPath();
+  cx.moveTo(0, baseY - 30);
+  for (let i = 0; i < 435; i++) {
+    const h = Math.sin((i + ox * 0.2) * 0.008) * 12 + 15;
+    cx.lineTo(i, baseY - 30 - h);
+  }
+  cx.lineTo(420, baseY);
+  cx.lineTo(0, baseY);
+  cx.closePath();
+  cx.fill();
+
+  // Moon ground (scrolls at 40% \u2014 ox is already game.ox * 0.4)
+  const moonOx = ox;
+  const grad = cx.createLinearGradient(0, baseY, 0, 746);
+  grad.addColorStop(0, '#d0c8b8');
+  grad.addColorStop(1, '#a09888');
+  cx.fillStyle = grad;
+  cx.beginPath();
+  cx.moveTo(0, baseY);
+  for (let i = 0; i < 435; i++) {
+    const wave = Math.sin((i + moonOx) * 0.005) * 8 +
+                 Math.sin((i + moonOx) * 0.015) * 4 +
+                 Math.sin((i + moonOx) * 0.04) * 2;
+    cx.lineTo(i, baseY + wave);
+  }
+  cx.lineTo(420, 746);
+  cx.lineTo(0, 746);
+  cx.closePath();
+  cx.fill();
+
+  // Surface line
+  cx.strokeStyle = '#8a8278';
+  cx.lineWidth = 2;
+  cx.beginPath();
+  cx.moveTo(0, baseY);
+  for (let i = 0; i < 435; i++) {
+    const wave = Math.sin((i + moonOx) * 0.005) * 8 +
+                 Math.sin((i + moonOx) * 0.015) * 4 +
+                 Math.sin((i + moonOx) * 0.04) * 2;
+    cx.lineTo(i, baseY + wave);
+  }
+  cx.stroke();
+
+  // Craters
+  for (let i = 0; i < 8; i++) {
+    const cx_pos = ((i * 150 - moonOx) % 420 + 420) % 420;
+    cx.fillStyle = '#7a7268';
+    cx.beginPath();
+    cx.ellipse(cx_pos, baseY + 20, 20, 10, 0, 0, Math.PI * 2);
+    cx.fill();
   }
 }
-function update(){
-  if(state!=='play'||!game.running)return;
-  let st=STAGES[game.stage];
-  let spd=1.5*st.speed;
-  let r=game.rover;
-  r.vy+=0.08;
-  if(r.vy>2.0)r.vy=2.0;
-  r.y+=r.vy;
-  let groundY=getGroundY(r.x+19,game.ox)-22;
-  if(r.y>=groundY){r.y=groundY;r.vy=0;r.onGround=true}else{r.onGround=false}
-  game.ox+=spd;
-  game.dist+=spd/8;
-  if(r.onGround&&r.boost<100)r.boost=Math.min(100,r.boost+0.3);
-  if(game.invTimer>0)game.invTimer--;
-  game.nextObs--;
-  if(game.nextObs<=0){
-    let types=['rock','rock','water','crater'];
-    let type=types[Math.floor(Math.random()*types.length)];
-    let gy=getGroundY(GW+10,game.ox);
-    let obs;
-    if(type==='rock'){obs={type,x:GW+10,y:gy-12,w:16,h:12}}
-    else if(type==='water'){obs={type,x:GW+10,y:gy-2,w:22,h:5}}
-    else{obs={type,x:GW+10,y:gy-6,w:18,h:8}}
-    game.obstacles.push(obs);
-    game.nextObs=Math.max(50,Math.floor(130/st.obsMul)+Math.random()*40);
+
+// Obstacle/crystal drawing
+function drawObstacle(obs) {
+  const baseY = 540;
+  const ox = game.ox * 0.4;
+  const y = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
+                    Math.sin((obs.x + ox) * 0.015) * 4 +
+                    Math.sin((obs.x + ox) * 0.04) * 2 - obs.h;
+
+  if (obs.type === 'rock') {
+    cx.fillStyle = '#8a7a6a';
+    cx.beginPath();
+    cx.moveTo(obs.x, y);
+    cx.lineTo(obs.x + 15, y - 8);
+    cx.lineTo(obs.x + 20, y);
+    cx.lineTo(obs.x + 15, y + 3);
+    cx.closePath();
+    cx.fill();
+    cx.strokeStyle = '#a09a8a';
+    cx.lineWidth = 2;
+    cx.stroke();
+  } else if (obs.type === 'water') {
+    cx.fillStyle = '#3a7aff';
+    cx.beginPath();
+    cx.ellipse(obs.x + 10, y + 2, 12, 6, 0, 0, Math.PI * 2);
+    cx.fill();
+    cx.strokeStyle = '#1a5adf';
+    cx.lineWidth = 2;
+    cx.stroke();
+  } else if (obs.type === 'crater') {
+    cx.fillStyle = '#6a5a4a';
+    cx.beginPath();
+    cx.ellipse(obs.x + 10, y + 4, 14, 8, 0, 0, Math.PI * 2);
+    cx.fill();
+    cx.strokeStyle = '#4a3a2a';
+    cx.lineWidth = 2;
+    cx.stroke();
   }
-  game.nextCry--;
-  if(game.nextCry<=0){
-    let gy=getGroundY(GW+10,game.ox);
-    game.crystals.push({x:GW+10,y:gy-30-Math.random()*15});
-    game.nextCry=Math.max(100,Math.floor(250/st.enMul)+Math.random()*60);
+}
+
+function drawCrystal(cryst) {
+  const baseY = 540;
+  const ox = game.ox * 0.4;
+  const y = baseY + Math.sin((cryst.x + ox) * 0.005) * 8 +
+                    Math.sin((cryst.x + ox) * 0.015) * 4 +
+                    Math.sin((cryst.x + ox) * 0.04) * 2 - 20;
+
+  cx.fillStyle = '#ffff00';
+  cx.beginPath();
+  cx.moveTo(cryst.x, y);
+  cx.lineTo(cryst.x + 8, y - 10);
+  cx.lineTo(cryst.x + 16, y);
+  cx.lineTo(cryst.x + 8, y + 10);
+  cx.closePath();
+  cx.fill();
+  cx.strokeStyle = '#ccaa00';
+  cx.lineWidth = 2;
+  cx.stroke();
+
+  // Sparkle
+  const sparkle = Math.sin(game.fr * 0.1) * 0.5 + 0.5;
+  cx.globalAlpha = sparkle;
+  cx.fillStyle = '#ffffff';
+  cx.beginPath();
+  cx.arc(cryst.x + 5, y - 5, 2, 0, Math.PI * 2);
+  cx.fill();
+  cx.globalAlpha = 1;
+}
+
+// HUD drawing
+function drawHUD() {
+  // Dark bar background
+  cx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  cx.fillRect(0, 0, 420, 60);
+  cx.strokeStyle = '#d0a000';
+  cx.lineWidth = 2;
+  cx.beginPath();
+  cx.moveTo(0, 55);
+  cx.lineTo(420, 55);
+  cx.stroke();
+
+  // Mini rover
+  drawRover(cx, rovers[game.roverId].key, 8, 8, 0.4);
+
+  // Hearts
+  cx.fillStyle = '#ff3030';
+  for (let i = 0; i < game.health; i++) {
+    pill(cx, 60 + i * 15, 18, 10, 10, 2, '#ff6666', '#cc0000', 1);
   }
-  let rHit={x:r.x+5,y:r.y+8,w:28,h:12};
-  for(let i=game.obstacles.length-1;i>=0;i--){
-    let o=game.obstacles[i];
-    o.x-=spd;
-    if(o.x<-30){game.obstacles.splice(i,1);continue}
-    if(game.invTimer<=0&&o.x<rHit.x+rHit.w&&o.x+o.w>rHit.x&&o.y<rHit.y+rHit.h&&o.y+o.h>rHit.y){
-      game.lives--;game.invTimer=120;
-      if(game.lives<=0){
-        game.running=false;
-        data.cumDist+=game.dist;data.best=Math.max(data.best,game.dist);
-        if(data.cumDist>=5000)data.unlocked.c=true;
-        if(data.cumDist>=15000)data.unlocked.p=true;
-        game.fact=FACTS[Math.floor(Math.random()*FACTS.length)];
-        state='over';
+
+  // Stage name
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 14px Arial';
+  cx.fillText(stages[game.stage].name, 120, 30);
+
+  // Distance (right)
+  cx.fillStyle = '#ffffff';
+  cx.font = 'bold 12px Arial';
+  const distStr = Math.floor(game.distance) + 'm';
+  cx.textAlign = 'right';
+  cx.fillText(distStr, 410, 30);
+  cx.textAlign = 'left';
+
+  // Progress bar
+  const progress = Math.min(game.distance / stages[game.stage].target, 1);
+  pill(cx, 300, 40, 110, 8, 2, '#333', '#d0a000', 1);
+  pill(cx, 300, 40, 110 * progress, 8, 2, '#d0a000', '#d0a000', 0);
+
+  // Booster gauge (left side)
+  pill(cx, 8, 66, 12, 60, 2, '#333', '#666', 1);
+  const boostFill = (game.boost / 100) * 60;
+  pill(cx, 8, 66 + 60 - boostFill, 12, boostFill, 2, '#00ff00', '#00aa00', 1);
+
+  // Jump hint
+  if (game.showJumpHint > 0) {
+    cx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    cx.font = 'bold 12px Arial';
+    cx.textAlign = 'center';
+    cx.fillText('TAP TO JUMP', 210, 280);
+    cx.textAlign = 'left';
+  }
+}
+
+// Game physics & updates
+function getGroundY(x) {
+  const baseY = 540;
+  const ox = game.ox * 0.4;
+  return baseY + Math.sin((x + ox) * 0.005) * 8 +
+                 Math.sin((x + ox) * 0.015) * 4 +
+                 Math.sin((x + ox) * 0.04) * 2;
+}
+
+function checkUnlocks() {
+  if (game.totalDistance >= 5000) rovers[1].unlocked = true;
+  if (game.totalDistance >= 15000) rovers[2].unlocked = true;
+}
+
+function updateGame() {
+  if (game.state !== 'play') return;
+
+  const stageSpeed = stages[game.stage].speed;
+  const scrollSpeed = 1.0 * stageSpeed;
+
+  // Invincibility cooldown
+  if (game.invincible > 0) game.invincible--;
+
+  // Physics
+  game.vy += 0.10;
+  if (game.vy > 3.0) game.vy = 3.0;
+
+  game.y += game.vy;
+  const groundY = getGroundY(game.roverX);
+  if (game.y + 25 >= groundY) {
+    game.y = groundY - 25;
+    game.vy = 0;
+    game.onGround = true;
+    if (game.boost < 100) game.boost += 0.25;
+    if (game.boost > 100) game.boost = 100;
+  } else {
+    game.onGround = false;
+  }
+
+  // Scroll
+  game.ox += scrollSpeed;
+  game.distance += scrollSpeed / 6;
+
+  // Spawn obstacles
+  if (game.fr % Math.max(30, Math.floor(60 / stages[game.stage].obsMul)) === 0 && Math.random() < 0.7) {
+    const type = ['rock', 'water', 'crater'][Math.floor(Math.random() * 3)];
+    game.obstacles.push({ x: 420, type: type, h: 10 + Math.random() * 15 });
+  }
+
+  // Spawn crystals
+  if (game.fr % Math.max(100, Math.floor(200 / stages[game.stage].enMul)) === 0 && Math.random() < 0.4) {
+    game.crystals.push({ x: 420 });
+  }
+
+  // Move obstacles
+  for (let i = game.obstacles.length - 1; i >= 0; i--) {
+    game.obstacles[i].x -= scrollSpeed;
+    if (game.obstacles[i].x < -30) {
+      game.obstacles.splice(i, 1);
+      continue;
+    }
+
+    const obs = game.obstacles[i];
+    const baseY = 540;
+    const ox = game.ox * 0.4;
+    const oy = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
+                       Math.sin((obs.x + ox) * 0.015) * 4 +
+                       Math.sin((obs.x + ox) * 0.04) * 2 - obs.h;
+
+    const hitbox = { x: game.roverX + 5, y: game.y + 5, w: 40, h: 25 };
+    const obsbox = { x: obs.x, y: oy, w: 20, h: obs.h };
+
+    if (hitbox.x < obsbox.x + obsbox.w && hitbox.x + hitbox.w > obsbox.x &&
+        hitbox.y < obsbox.y + obsbox.h && hitbox.y + hitbox.h > obsbox.y) {
+      if (game.invincible <= 0) {
+        game.health--;
+        game.invincible = 60; // ~1 second invincibility
+        game.obstacles.splice(i, 1);
+        if (game.health <= 0) {
+          game.state = 'over';
+          game.bestDistance = Math.max(game.bestDistance, game.distance);
+          game.totalDistance += game.distance;
+          game.currentFact = lunarFacts[Math.floor(Math.random() * lunarFacts.length)];
+          checkUnlocks();
+        }
       }
     }
   }
-  for(let i=game.crystals.length-1;i>=0;i--){
-    let c=game.crystals[i];
-    c.x-=spd;
-    if(c.x<-15){game.crystals.splice(i,1);continue}
-    if(c.x<rHit.x+rHit.w&&c.x+8>rHit.x&&c.y<rHit.y+rHit.h&&c.y+11>rHit.y){
-      r.boost=Math.min(100,r.boost+25);game.crystals.splice(i,1);
+
+  // Move crystals
+  for (let i = game.crystals.length - 1; i >= 0; i--) {
+    game.crystals[i].x -= scrollSpeed;
+    if (game.crystals[i].x < -30) {
+      game.crystals.splice(i, 1);
+      continue;
+    }
+
+    const cryst = game.crystals[i];
+    const baseY = 540;
+    const ox = game.ox * 0.4;
+    const cy = baseY + Math.sin((cryst.x + ox) * 0.005) * 8 +
+                       Math.sin((cryst.x + ox) * 0.015) * 4 +
+                       Math.sin((cryst.x + ox) * 0.04) * 2 - 20;
+
+    const hitbox = { x: game.roverX + 5, y: game.y + 5, w: 40, h: 25 };
+    const cbox = { x: cryst.x - 8, y: cy - 10, w: 16, h: 20 };
+
+    if (hitbox.x < cbox.x + cbox.w && hitbox.x + hitbox.w > cbox.x &&
+        hitbox.y < cbox.y + cbox.h && hitbox.y + hitbox.h > cbox.y) {
+      game.boost += 25;
+      if (game.boost > 100) game.boost = 100;
+      game.crystals.splice(i, 1);
     }
   }
-  if(game.dist>=st.target){
-    game.running=false;
-    data.cumDist+=game.dist;data.best=Math.max(data.best,game.dist);
-    if(data.cumDist>=5000)data.unlocked.c=true;
-    if(data.cumDist>=15000)data.unlocked.p=true;
-    if(game.stage<4)state='clear';else state='victory';
+
+  // Check stage clear
+  if (game.distance >= stages[game.stage].target) {
+    if (game.stage === 4) {
+      game.state = 'victory';
+    } else {
+      game.state = 'clear';
+    }
+    game.bestDistance = Math.max(game.bestDistance, game.distance);
+    game.totalDistance += game.distance;
+    checkUnlocks();
   }
+
+  game.showJumpHint--;
 }
-function renderTitle(){
-  drawSky();drawNebula(fr*0.2);drawStars(fr*0.25);
-  drawPlanet(255,25,6,180,120,220,true);
-  drawPlanet(280,45,4,220,180,100,false);
-  drawPlanet(40,38,3,180,100,100,false);
-  drawEarth(45,70,10);
-  drawMoon(210,55,35);
-  drawGround(fr*0.1);
-  for(let i=0;i<30;i++){let tx=68-i;if(tx<0)continue;
-    let ty=getGroundY(tx,fr*0.1)-1;
-    CX.globalAlpha=0.12*(1-i/30);px(tx,ty,'#7a6850');px(tx,ty+2,'#7a6850');CX.globalAlpha=1;
+
+function drawGamePlay() {
+  drawBg();
+  drawGround();
+
+  for (let obs of game.obstacles) {
+    drawObstacle(obs);
   }
-  let rgy=getGroundY(68+19,fr*0.1)-22+Math.sin(fr*0.04)*0.5;
-  drawRover(68,rgy|0,false);
-  CX.save();CX.shadowColor='rgba(240,230,200,0.25)';CX.shadowBlur=PX*6;
-  txt('MOON',GW/2*PX+30*PX,38*PX,PX*14,'#f0ece0','center');
-  CX.shadowColor='rgba(160,190,230,0.25)';
-  txt('RUNNER',GW/2*PX+30*PX,52*PX,PX*14,'#a0b8e0','center');
-  CX.restore();
-  txt('A LUNAR EXPLORATION ADVENTURE',GW/2*PX+30*PX,66*PX,PX*4,'rgba(170,165,200,0.6)','center');
-  let blink=Math.sin(fr*0.04)*0.5+0.5;
-  CX.globalAlpha=blink;txt('TAP TO START',GW/2*PX,(GH-14)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
+  for (let cryst of game.crystals) {
+    drawCrystal(cryst);
+  }
+
+  // Blink rover during invincibility
+  if (game.invincible > 0 && game.fr % 6 < 3) {
+    cx.globalAlpha = 0.3;
+  }
+  drawRover(cx, rovers[game.roverId].key, game.roverX, game.y, 1);
+  cx.globalAlpha = 1;
+  drawHUD();
 }
-function renderSelect(){
-  drawSky();drawStars(fr*0.06);
-  txt('SELECT ROVER',GW/2*PX,12*PX,PX*7,'#e0dcd0','center');
-  let rovers=[
-    {key:'s',name:'SOJOURNER',desc:'Lightweight Scout',unlocked:data.unlocked.s,req:0,spd:0.6,arm:0.4,bst:0.8},
-    {key:'c',name:'CURIOSITY',desc:'All-Terrain Explorer',unlocked:data.unlocked.c,req:5000,spd:0.75,arm:0.6,bst:0.65},
-    {key:'p',name:'PERSEVERANCE',desc:'Heavy Science Unit',unlocked:data.unlocked.p,req:15000,spd:0.9,arm:0.8,bst:0.5},
+
+// Title screen
+function drawTitle() {
+  cx.fillStyle = '#000';
+  cx.fillRect(0, 0, 420, 746);
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 48px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('MOON RUNNER', 210, 150);
+  cx.font = 'bold 24px Arial';
+  cx.fillText('Lunar Rover Adventure', 210, 190);
+
+  drawRover(cx, 'sojourner', 140, 250, 1.5);
+  drawRover(cx, 'curiosity', 160, 350, 1.5);
+  drawRover(cx, 'perseverance', 150, 450, 1.5);
+
+  cx.fillStyle = '#ffffff';
+  cx.font = 'bold 16px Arial';
+  cx.fillText('TAP TO START', 210, 630);
+  cx.textAlign = 'left';
+}
+
+// Select rover screen
+function drawSelect() {
+  cx.fillStyle = '#1a1a2e';
+  cx.fillRect(0, 0, 420, 746);
+
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 32px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('SELECT ROVER', 210, 50);
+
+  const y_positions = [120, 340, 560];
+  for (let i = 0; i < 3; i++) {
+    const r = rovers[i];
+    const y = y_positions[i];
+    const selected = i === game.roverId;
+
+    // Card border
+    const color = selected ? '#ffff00' : r.color;
+    pill(cx, 30, y, 360, 150, 10, '#222', color, selected ? 4 : 2);
+
+    // Name
+    cx.fillStyle = color;
+    cx.font = 'bold 20px Arial';
+    cx.textAlign = 'left';
+    cx.fillText(r.name, 60, y + 30);
+
+    // Stats
+    cx.fillStyle = '#aaa';
+    cx.font = 'bold 12px Arial';
+    cx.fillText('SPD', 60, y + 50);
+    cx.fillText('ARM', 150, y + 50);
+    cx.fillText('BST', 240, y + 50);
+
+    // Stat bars
+    pill(cx, 60, y + 60, 60, 6, 2, '#333', '#666', 1);
+    pill(cx, 60, y + 60, r.spd * 20, 6, 2, '#00ff00', '#00aa00', 0);
+
+    pill(cx, 150, y + 60, 60, 6, 2, '#333', '#666', 1);
+    pill(cx, 150, y + 60, r.arm * 15, 6, 2, '#ff6600', '#cc3300', 0);
+
+    pill(cx, 240, y + 60, 60, 6, 2, '#333', '#666', 1);
+    pill(cx, 240, y + 60, r.bst * 20, 6, 2, '#00ccff', '#0099cc', 0);
+
+    // Locked/unlocked
+    if (!r.unlocked) {
+      cx.fillStyle = '#ff3030';
+      cx.font = 'bold 14px Arial';
+      cx.textAlign = 'center';
+      cx.fillText('LOCKED', 210, y + 110);
+      cx.textAlign = 'left';
+    } else {
+      drawRover(cx, r.key, 320, y + 10, 1);
+    }
+  }
+
+  // Total distance
+  cx.fillStyle = '#888';
+  cx.font = 'bold 14px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('TOTAL DISTANCE: ' + Math.floor(game.totalDistance) + 'm', 210, 720);
+  cx.textAlign = 'left';
+}
+
+// Stage map screen
+function drawStageMap() {
+  cx.fillStyle = '#000';
+  cx.fillRect(0, 0, 420, 746);
+
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 28px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('MISSION MAP', 210, 50);
+
+  // Moon circle
+  circle(cx, 210, 280, 100, '#e8e0d0', '#a09888', 3);
+
+  // Crater details
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2;
+    const x = 210 + Math.cos(angle) * 70;
+    const y = 280 + Math.sin(angle) * 70;
+    cx.fillStyle = '#8a7a6a';
+    cx.beginPath();
+    cx.arc(x, y, 8, 0, Math.PI * 2);
+    cx.fill();
+  }
+
+  // Stage markers
+  const positions = [
+    { x: 210, y: 210 },
+    { x: 290, y: 230 },
+    { x: 310, y: 310 },
+    { x: 260, y: 360 },
+    { x: 160, y: 350 },
   ];
-  selectCards=[];
-  for(let i=0;i<3;i++){
-    let rv=rovers[i];
-    let cx=53+i*76,cl=cx-32,ct=26,cw=64,ch=130;
-    let isSel=rv.unlocked&&i===selIdx;
-    CX.fillStyle=isSel?'rgba(120,100,200,0.25)':rv.unlocked?'rgba(90,80,150,0.15)':'rgba(50,45,80,0.08)';
-    CX.fillRect(cl*PX,ct*PX,cw*PX,ch*PX);
-    CX.strokeStyle=isSel?'rgba(224,192,64,0.7)':rv.unlocked?'rgba(170,160,230,0.4)':'rgba(110,100,150,0.18)';
-    CX.lineWidth=isSel?PX*2:PX;CX.strokeRect(cl*PX,ct*PX,cw*PX,ch*PX);
-    if(rv.unlocked){
-      let bob=Math.sin(fr*0.025+i*1.5)*1;
-      drawRover(cx-19,(57+bob)|0,false);
-    }else{
-      CX.fillStyle='#101018';CX.fillRect((cx-12)*PX,57*PX,24*PX,18*PX);
-      txt('?',cx*PX,62*PX,PX*10,'#303050','center');
+
+  // Path
+  cx.strokeStyle = '#666';
+  cx.lineWidth = 2;
+  cx.setLineDash([5, 5]);
+  cx.beginPath();
+  cx.moveTo(positions[0].x, positions[0].y);
+  for (let i = 1; i < 5; i++) {
+    cx.lineTo(positions[i].x, positions[i].y);
+  }
+  cx.stroke();
+  cx.setLineDash([]);
+
+  // Dots
+  for (let i = 0; i < 5; i++) {
+    const pos = positions[i];
+    if (i < game.stage) {
+      // Completed
+      circle(cx, pos.x, pos.y, 12, '#d0a000', '#a08000', 2);
+      cx.fillStyle = '#000';
+      cx.font = 'bold 16px Arial';
+      cx.textAlign = 'center';
+      cx.fillText('\u2713', pos.x, pos.y + 6);
+    } else if (i === game.stage) {
+      // Active (pulsing)
+      const pulse = Math.sin(game.fr * 0.1) * 0.3 + 0.7;
+      circle(cx, pos.x, pos.y, 12 * pulse, stages[i].color, '#fff', 2);
+      cx.fillStyle = stages[i].color;
+      cx.font = 'bold 14px Arial';
+      cx.textAlign = 'center';
+      cx.fillText((i + 1), pos.x, pos.y + 5);
+    } else {
+      // Locked
+      circle(cx, pos.x, pos.y, 10, '#666', '#333', 2);
+      cx.fillStyle = '#333';
+      cx.font = 'bold 12px Arial';
+      cx.textAlign = 'center';
+      cx.fillText((i + 1), pos.x, pos.y + 4);
     }
-    txt(rv.name,cx*PX,82*PX,PX*4,rv.unlocked?'#e0dcd0':'#404060','center');
-    txt(rv.desc,cx*PX,89*PX,PX*3,'#8080a8','center');
-    txt(rv.unlocked?'UNLOCKED':rv.req+'m REQ',cx*PX,96*PX,PX*3,rv.unlocked?'#50c870':'#a05858','center');
-    if(rv.unlocked){
-      let stats=[['SPD',rv.spd,'#50c0f0'],['ARM',rv.arm,'#e0c040'],['BST',rv.bst,'#50e080']];
-      for(let s=0;s<3;s++){
-        let sy=105+s*7;
-        txt(stats[s][0],(cl+3)*PX,sy*PX,PX*2.5,'#8080a0','left');
-        CX.fillStyle='rgba(100,90,150,0.2)';CX.fillRect((cl+14)*PX,sy*PX,35*PX,3*PX);
-        CX.fillStyle=stats[s][2];CX.fillRect((cl+14)*PX,sy*PX,Math.floor(35*stats[s][1])*PX,3*PX);
-      }
+    cx.textAlign = 'left';
+  }
+
+  // Stage info
+  const stage = stages[game.stage];
+  cx.fillStyle = stage.color;
+  cx.font = 'bold 20px Arial';
+  cx.textAlign = 'center';
+  cx.fillText(stage.name, 210, 480);
+  cx.fillStyle = '#aaa';
+  cx.font = 'bold 14px Arial';
+  cx.fillText(stage.sub, 210, 505);
+
+  cx.fillStyle = '#fff';
+  cx.font = 'bold 12px Arial';
+  cx.fillText('DIFFICULTY: ' + stage.diff, 210, 530);
+  cx.fillText('TARGET: ' + stage.target + 'm', 210, 550);
+
+  // Prompt
+  const blink = Math.sin(game.fr * 0.1) > 0 ? 1 : 0.3;
+  cx.fillStyle = 'rgba(208, 160, 0, ' + blink + ')';
+  cx.font = 'bold 14px Arial';
+  cx.fillText('TAP TO START MISSION', 210, 620);
+  cx.textAlign = 'left';
+}
+
+// Game over screen
+function drawGameOver() {
+  cx.fillStyle = '#000';
+  cx.fillRect(0, 0, 420, 746);
+
+  cx.fillStyle = '#ff3030';
+  cx.font = 'bold 40px Arial';
+  cx.textAlign = 'center';
+  cx.strokeStyle = '#660000';
+  cx.lineWidth = 3;
+  cx.strokeText('MISSION ENDED', 210, 80);
+  cx.fillText('MISSION ENDED', 210, 80);
+
+  // Stats
+  cx.fillStyle = '#fff';
+  cx.font = 'bold 16px Arial';
+  cx.fillText('DISTANCE: ' + Math.floor(game.distance) + 'm', 210, 140);
+  cx.fillText('BEST: ' + Math.floor(game.bestDistance) + 'm', 210, 165);
+
+  // TCG Card
+  const cardX = 40, cardY = 200, cardW = 340, cardH = 280;
+
+  // Outer purple border with glow
+  cx.fillStyle = 'rgba(64, 40, 160, 0.3)';
+  cx.fillRect(cardX - 5, cardY - 5, cardW + 10, cardH + 10);
+
+  cx.fillStyle = '#4028a0';
+  cx.fillRect(cardX, cardY, cardW, cardH);
+
+  // Gold gradient frame
+  const gf = cx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
+  gf.addColorStop(0, '#ffcc00');
+  gf.addColorStop(0.5, '#d4a000');
+  gf.addColorStop(1, '#ffcc00');
+  cx.fillStyle = gf;
+  cx.fillRect(cardX + 5, cardY + 5, cardW - 10, 3);
+  cx.fillRect(cardX + 5, cardY + cardH - 8, cardW - 10, 3);
+
+  // Hexagon cost badge
+  cx.fillStyle = '#d0a000';
+  cx.beginPath();
+  const cx_b = cardX + 20, cy_b = cardY + 20, r_b = 12;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const x = cx_b + Math.cos(angle) * r_b;
+    const y = cy_b + Math.sin(angle) * r_b;
+    if (i === 0) cx.moveTo(x, y);
+    else cx.lineTo(x, y);
+  }
+  cx.closePath();
+  cx.fill();
+  cx.fillStyle = '#000';
+  cx.font = 'bold 14px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('\ud83c\udf19', cx_b, cy_b + 5);
+
+  // Fact text (stored when entering game over state)
+  const fact = game.currentFact || lunarFacts[0];
+
+  // Illustration window
+  cx.fillStyle = '#a09888';
+  cx.fillRect(cardX + 15, cardY + 45, cardW - 30, 80);
+  // Simple moon scene
+  circle(cx, cardX + 80, cardY + 65, 15, '#e8e0d0', '#999', 1);
+  drawRover(cx, rovers[game.roverId].key, cardX + 130, cardY + 80, 0.7);
+
+  // Card name
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 12px Arial';
+  cx.textAlign = 'left';
+  cx.fillText(fact.title || 'LUNAR WONDER', cardX + 15, cardY + 150);
+
+  // Type line
+  cx.fillStyle = '#999';
+  cx.font = '11px Arial';
+  cx.fillText(fact.type || 'LUNAR FACT', cardX + 15, cardY + 165);
+  cx.fillStyle = '#ddd';
+  cx.font = 'bold 10px Arial';
+  cx.textAlign = 'center';
+  const words = fact.text.split(' ');
+  let line = '';
+  let yoff = 0;
+  for (let w of words) {
+    if ((line + w).length > 30) {
+      cx.fillText(line, 210, cardY + 180 + yoff);
+      yoff += 12;
+      line = w + ' ';
+    } else {
+      line += w + ' ';
     }
-    selectCards.push({x:cl,y:ct,w:cw,h:ch,key:rv.key,unlocked:rv.unlocked});
   }
-  txt('TOTAL: '+Math.floor(data.cumDist)+' m',GW/2*PX,(GH-20)*PX,PX*4.5,'#e0c040','center');
-  txt('\u2190 \u2192 SELECT   SPACE START',GW/2*PX,(GH-10)*PX,PX*3,'rgba(170,165,200,0.5)','center');
+  if (line) cx.fillText(line, 210, cardY + 180 + yoff);
+
+  cx.font = '9px Arial';
+  cx.fillStyle = '#999';
+  cx.fillText(fact.type, 210, cardY + 240);
+
+  // Retry button
+  pill(cx, 130, 520, 160, 40, 5, '#d0a000', '#a08000', 2);
+  cx.fillStyle = '#000';
+  cx.font = 'bold 16px Arial';
+  cx.textAlign = 'center';
+  cx.fillText('TAP TO RETRY', 210, 548);
+  cx.textAlign = 'left';
 }
-function renderPlay(){
-  drawSky();drawNebula(game.ox);drawStars(game.ox);
-  drawPlanet(((250-game.ox*0.015)%350+350)%350,28,5,180,130,220,true);
-  drawEarth(((280-game.ox*0.008)%400+400)%400,40,8);
-  if(fr%280<45)drawMeteor(50+(fr%280)*2,12+(fr%280));
-  drawGround(game.ox);
-  for(let c of game.crystals)drawCrystal(c.x|0,c.y|0);
-  for(let o of game.obstacles){
-    if(o.type==='rock')drawRockSprite(o.x|0,o.y|0);
-    else if(o.type==='water')drawWater(o.x|0,o.y|0,o.w);
-    else{CX.fillStyle='#3a2e22';CX.beginPath();CX.ellipse((o.x+o.w/2)*PX,(o.y+o.h/2)*PX,(o.w/2)*PX,(o.h/2.5)*PX,0,0,6.28);CX.fill();CX.fillStyle='#5a4e3e';CX.beginPath();CX.ellipse((o.x+o.w/2)*PX,(o.y+1)*PX,(o.w/2)*PX,2*PX,0,0,6.28);CX.fill()}
+
+// Clear screen
+function drawClear() {
+  cx.fillStyle = '#000';
+  cx.fillRect(0, 0, 420, 746);
+
+  const stage = stages[game.stage];
+  cx.fillStyle = stage.color;
+  cx.font = 'bold 48px Arial';
+  cx.textAlign = 'center';
+  cx.strokeStyle = '#000';
+  cx.lineWidth = 3;
+  cx.strokeText('STAGE CLEAR!', 210, 150);
+  cx.fillText('STAGE CLEAR!', 210, 150);
+
+  cx.fillStyle = '#fff';
+  cx.font = 'bold 24px Arial';
+  cx.fillText(stage.name, 210, 200);
+
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 18px Arial';
+  cx.fillText('DISTANCE: ' + Math.floor(game.distance) + 'm', 210, 280);
+
+  // Gold badge with stage number
+  circle(cx, 210, 380, 40, '#ffcc00', '#d0a000', 3);
+  cx.fillStyle = '#000';
+  cx.font = 'bold 32px Arial';
+  cx.textAlign = 'center';
+  cx.fillText((game.stage + 1), 210, 395);
+
+  cx.fillStyle = '#fff';
+  cx.font = 'bold 14px Arial';
+  cx.fillText('TAP FOR NEXT STAGE', 210, 550);
+  cx.textAlign = 'left';
+}
+
+// Victory screen
+function drawVictory() {
+  cx.fillStyle = '#000';
+  cx.fillRect(0, 0, 420, 746);
+
+  cx.fillStyle = '#ffff00';
+  cx.font = 'bold 52px Arial';
+  cx.textAlign = 'center';
+  cx.strokeStyle = '#000';
+  cx.lineWidth = 4;
+  cx.strokeText('MISSION COMPLETE!', 210, 150);
+  cx.fillText('MISSION COMPLETE!', 210, 150);
+
+  cx.fillStyle = '#d0a000';
+  cx.font = 'bold 18px Arial';
+  cx.fillText('ALL LUNAR REGIONS CONQUERED', 210, 200);
+  cx.fillText('TOTAL DISTANCE: ' + Math.floor(game.distance) + 'm', 210, 280);
+
+  // Gold star
+  drawCuteStar(cx, 210, 380, 50, '#ffff00', '#d0a000');
+
+  cx.fillStyle = '#fff';
+  cx.font = 'bold 14px Arial';
+  cx.fillText('TAP TO RETURN TO TITLE', 210, 600);
+  cx.textAlign = 'left';
+}
+
+// Main draw
+function draw() {
+  if (game.state === 'title') {
+    drawTitle();
+  } else if (game.state === 'select') {
+    drawSelect();
+  } else if (game.state === 'stageMap') {
+    drawStageMap();
+  } else if (game.state === 'play') {
+    drawGamePlay();
+  } else if (game.state === 'over') {
+    drawGameOver();
+  } else if (game.state === 'clear') {
+    drawClear();
+  } else if (game.state === 'victory') {
+    drawVictory();
   }
-  if(game.rover.onGround)for(let i=0;i<4;i++){
-    let dx=game.rover.x-2-i*3-(fr%12);
-    let dy=getGroundY(dx,game.ox)-1;
-    if(dx>0){CX.globalAlpha=0.3-i*0.07;px(dx|0,dy|0,'#a09080');CX.globalAlpha=1}
-  }
-  drawRover(game.rover.x,game.rover.y|0,game.invTimer>0);
-  CX.fillStyle='rgba(8,8,25,0.55)';CX.fillRect(0,0,SW,13*PX);
-  for(let i=0;i<3;i++)drawHeart(3+i*9,3,i<game.lives);
-  let st=STAGES[game.stage];
-  txt('AREA '+(game.stage+1),32*PX,3*PX,PX*4,'#b0b8d8','left');
-  txt(Math.floor(game.dist)+'m',(GW-4)*PX,3*PX,PX*5,'#e0c040','right');
-  let prog=Math.min(1,game.dist/st.target);
-  CX.fillStyle='rgba(120,110,170,0.18)';CX.fillRect(32*PX,9*PX,(GW-75)*PX,2.5*PX);
-  CX.fillStyle='rgba(80,200,120,0.6)';CX.fillRect(32*PX,9*PX,Math.floor((GW-75)*prog)*PX,2.5*PX);
-  CX.fillStyle='rgba(8,8,25,0.5)';CX.fillRect(2*PX,(GH-55)*PX,6*PX,42*PX);
-  CX.strokeStyle='rgba(120,110,170,0.2)';CX.lineWidth=1;CX.strokeRect(2*PX,(GH-55)*PX,6*PX,42*PX);
-  let bl=game.rover.boost/100;let bh=Math.floor(38*bl);
-  let bGr=CX.createLinearGradient(0,(GH-55+(38-bh)+2)*PX,0,(GH-15)*PX);
-  bGr.addColorStop(0,'#50c0f8');bGr.addColorStop(1,'#2868b8');
-  CX.fillStyle=bGr;CX.fillRect(3*PX,(GH-55+(38-bh)+2)*PX,4*PX,bh*PX);
-  txt('BST',5*PX,(GH-58)*PX,PX*2.5,'#8888c0','center');
-  if(game.dist<60){
-    let a=Math.max(0,1-game.dist/60);
-    CX.globalAlpha=a*0.7;
-    txt('TAP / SPACE TO JUMP',GW/2*PX,(GH/2+10)*PX,PX*5,'#e0c040','center');
-    CX.globalAlpha=1;
-  }
 }
-function renderOver(){
-  drawSky();drawStars(fr*0.03);
-  drawMoon(GW/2,35,25);
-  CX.save();CX.shadowColor='rgba(210,130,130,0.3)';CX.shadowBlur=PX*4;
-  txt('MISSION ENDED',GW/2*PX,72*PX,PX*9,'#d0a8a8','center');CX.restore();
-  txt('DISTANCE: '+Math.floor(game.dist)+' m',GW/2*PX,90*PX,PX*5,'#b0b8d8','center');
-  txt('BEST: '+Math.floor(data.best)+' m',GW/2*PX,100*PX,PX*5,'#e0c040','center');
-  CX.fillStyle='rgba(12,10,30,0.4)';CX.fillRect(25*PX,112*PX,(GW-50)*PX,35*PX);
-  CX.strokeStyle='rgba(150,140,200,0.2)';CX.lineWidth=PX;CX.strokeRect(25*PX,112*PX,(GW-50)*PX,35*PX);
-  txt('\u2014 LUNAR FACT \u2014',GW/2*PX,116*PX,PX*3.5,'#e0c040','center');
-  let words=game.fact.split(' '),line='',ly=128;
-  for(let w of words){
-    let test=line+w+' ';
-    if(CX.measureText&&test.length>38){txt(line.trim(),GW/2*PX,ly*PX,PX*3.5,'#c0b8d0','center');ly+=7;line=w+' '}else line=test;
-  }
-  txt(line.trim(),GW/2*PX,ly*PX,PX*3.5,'#c0b8d0','center');
-  CX.strokeStyle='#e0c040';CX.lineWidth=PX*1.5;CX.beginPath();CX.arc(GW/2*PX,165*PX,8*PX,0,6.28);CX.stroke();
-  txt('\u2605',GW/2*PX,162*PX,PX*5,'#e0c040','center');
-  let blink=Math.sin(fr*0.04)*0.5+0.5;
-  CX.globalAlpha=blink;txt('TAP TO RETRY',GW/2*PX,(GH-12)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
+
+// Input
+function startGame() {
+  game.state = 'play';
+  game.ox = 0;
+  game.distance = 0;
+  game.health = 3;
+  game.boost = 100;
+  game.vy = 0;
+  game.y = 540 - 25; // ground level minus rover height
+  game.obstacles = [];
+  game.crystals = [];
+  game.onGround = true;
+  game.jumps = 0;
+  game.invincible = 0;
+  game.showJumpHint = 120;
+  game.currentFact = lunarFacts[Math.floor(Math.random() * lunarFacts.length)];
 }
-function renderClear(){
-  drawSky();drawStars(fr*0.05);drawMoon(GW/2,40,30);
-  CX.save();CX.shadowColor='rgba(240,200,60,0.3)';CX.shadowBlur=PX*6;
-  txt('STAGE CLEAR!',GW/2*PX,80*PX,PX*10,'#e0c040','center');CX.restore();
-  txt(STAGES[game.stage].name,GW/2*PX,100*PX,PX*5,'#b0b8d8','center');
-  txt(Math.floor(game.dist)+' m',GW/2*PX,112*PX,PX*5,'#e0c040','center');
-  CX.fillStyle='#e0c040';CX.beginPath();CX.arc(GW/2*PX,140*PX,12*PX,0,6.28);CX.fill();
-  CX.strokeStyle='#fff';CX.lineWidth=PX;CX.stroke();
-  txt(''+(game.stage+1),GW/2*PX,136*PX,PX*7,'#1a1520','center');
-  let blink=Math.sin(fr*0.04)*0.5+0.5;
-  CX.globalAlpha=blink;txt('TAP TO CONTINUE',GW/2*PX,(GH-12)*PX,PX*5,'#e0c040','center');CX.globalAlpha=1;
-}
-function renderVictory(){
-  drawSky();drawStars(fr*0.04);drawMoon(GW/2,40,30);
-  CX.save();CX.shadowColor='rgba(80,200,120,0.3)';CX.shadowBlur=PX*6;
-  txt('MISSION COMPLETE!',GW/2*PX,78*PX,PX*8,'#50c878','center');CX.restore();
-  txt('All 5 areas conquered!',GW/2*PX,98*PX,PX*5,'#e0dcd0','center');
-  txt('Total: '+Math.floor(data.cumDist)+' m',GW/2*PX,112*PX,PX*5,'#e0c040','center');
-  CX.fillStyle='#e0c040';CX.beginPath();CX.arc(GW/2*PX,142*PX,14*PX,0,6.28);CX.fill();
-  txt('\u2605',GW/2*PX,138*PX,PX*7,'#1a1520','center');
-  let blink=Math.sin(fr*0.04)*0.5+0.5;
-  CX.globalAlpha=blink;txt('TAP TO RETURN',GW/2*PX,(GH-12)*PX,PX*5,'#50c878','center');CX.globalAlpha=1;
-}
-let jumpQueued=false;
-function handleInput(cx,cy){
-  if(state==='title'){state='select';return}
-  if(state==='select'){
-    let rect=CV.getBoundingClientRect();
-    let scaleX=SW/rect.width,scaleY=SH/rect.height;
-    let mx=(cx-rect.left)*scaleX/PX, my=(cy-rect.top)*scaleY/PX;
-    for(let c of selectCards){
-      if(c.unlocked&&mx>=c.x&&mx<c.x+c.w&&my>=c.y&&my<c.y+c.h){
-        data.rover=c.key;game.stage=0;startGame();state='play';return;
-      }
+
+document.addEventListener('pointerdown', (e) => {
+  if (game.state === 'title') {
+    game.state = 'select';
+  } else if (game.state === 'select') {
+    if (rovers[game.roverId].unlocked) {
+      game.stage = 0;
+      game.state = 'stageMap';
     }
-    return;
-  }
-  if(state==='play'){doJump();return}
-  if(state==='over'){state='select';return}
-  if(state==='clear'){game.stage++;startGame();state='play';return}
-  if(state==='victory'){game.stage=0;state='title';return}
-}
-CV.addEventListener('pointerdown',e=>{e.preventDefault();handleInput(e.clientX,e.clientY)});
-let selIdx=0;
-window.addEventListener('keydown',e=>{
-  if(e.code==='Space'||e.code==='ArrowUp'){
-    e.preventDefault();
-    if(state==='play')doJump();
-    else if(state==='select'){
-      let unlocked=selectCards.filter(c=>c.unlocked);
-      if(unlocked.length>0){let c=unlocked[Math.min(selIdx,unlocked.length-1)];data.rover=c.key;game.stage=0;startGame();state='play';}
+  } else if (game.state === 'stageMap') {
+    startGame();
+  } else if (game.state === 'play') {
+    if (game.onGround) {
+      game.vy = -5.0;
+      game.onGround = false;
+    } else if (game.boost >= 20) {
+      game.vy = -3.5;
+      game.boost -= 20;
     }
-    else handleInput(0,0);
-  }
-  if(state==='select'&&(e.code==='ArrowLeft'||e.code==='ArrowRight')){
-    e.preventDefault();
-    let unlocked=selectCards.filter(c=>c.unlocked);
-    if(e.code==='ArrowLeft')selIdx=Math.max(0,selIdx-1);
-    else selIdx=Math.min(unlocked.length-1,selIdx+1);
+  } else if (game.state === 'over') {
+    game.state = 'select';
+  } else if (game.state === 'clear') {
+    game.stage++;
+    game.state = 'stageMap';
+  } else if (game.state === 'victory') {
+    game.state = 'title';
   }
 });
-function loop(){
-  fr++;
-  CX.clearRect(0,0,SW,SH);
-  update();
-  if(state==='title')renderTitle();
-  else if(state==='select')renderSelect();
-  else if(state==='play')renderPlay();
-  else if(state==='over')renderOver();
-  else if(state==='clear')renderClear();
-  else if(state==='victory')renderVictory();
-  requestAnimationFrame(loop);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    if (game.state === 'select') {
+      game.roverId = (game.roverId - 1 + 3) % 3;
+      return;
+    }
+  }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    if (game.state === 'select') {
+      game.roverId = (game.roverId + 1) % 3;
+      return;
+    }
+  }
+  if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'Enter') {
+    e.preventDefault();
+    if (game.state === 'title') {
+      game.state = 'select';
+    } else if (game.state === 'select') {
+      if (rovers[game.roverId].unlocked) {
+        game.stage = 0;
+        game.state = 'stageMap';
+      }
+    } else if (game.state === 'stageMap') {
+      startGame();
+    } else if (game.state === 'play') {
+      if (game.onGround) {
+        game.vy = -5.0;
+        game.onGround = false;
+      } else if (game.boost >= 20) {
+        game.vy = -3.5;
+        game.boost -= 20;
+      }
+    } else if (game.state === 'over') {
+      game.state = 'select';
+    } else if (game.state === 'clear') {
+      game.stage++;
+      game.state = 'stageMap';
+    } else if (game.state === 'victory') {
+      game.state = 'title';
+    }
+  }
+});
+
+// Game loop
+function gameLoop() {
+  game.fr++;
+  updateGame();
+  draw();
+  requestAnimationFrame(gameLoop);
 }
-loop();
-</script>
+
+// Initialize
+game.obstacles = [];
+game.crystals = [];
+game.onGround = true;
+game.y = 540 - 25;
+game.invincible = 0;
+game.currentFact = lunarFacts[0];
+
+// Unlock logic on completion
+game.bestDistance = 0;
+game.totalDistance = 0;
+
+gameLoop();
+  </script>
 </body>
 </html>
