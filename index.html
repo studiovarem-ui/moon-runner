@@ -95,18 +95,18 @@ const stages = [
 ];
 
 const lunarFacts = [
-  { title: 'GRAVITY', type: 'LUNAR FACT \u2022 PHYSICS', text: 'The Moon has 1/6th the gravity of Earth. A 180lb astronaut weighs only 30lb on the lunar surface!' },
-  { title: 'DUST', type: 'LUNAR FACT \u2022 MATERIAL', text: 'Moon dust is extremely abrasive and can damage equipment. Its particles are sharp and electrostatically charged.' },
-  { title: 'TEMPERATURE', type: 'LUNAR FACT \u2022 CLIMATE', text: 'Lunar surface temps swing from -173\u00b0C in shadow to 127\u00b0C in sunlight. Extreme conditions test rovers daily.' },
-  { title: 'CRATERS', type: 'LUNAR FACT \u2022 GEOLOGY', text: 'The Moon has over 300,000 craters larger than 1km. They reveal billions of years of cosmic impacts.' },
-  { title: 'ROTATION', type: 'LUNAR FACT \u2022 ASTRONOMY', text: 'The Moon is tidally locked to Earth. We always see the same face\u2014the far side remained unknown until 1959.' },
-  { title: 'WATER ICE', type: 'LUNAR FACT \u2022 DISCOVERY', text: 'In 2008, water ice was detected in lunar soil. Permanently shadowed craters at the poles hold ancient frozen water.' },
-  { title: 'REGOLITH', type: 'LUNAR FACT \u2022 GEOLOGY', text: "The Moon's surface layer is called regolith. It's ancient powdered rock created by billions of years of asteroid bombardment." },
-  { title: 'SEISMIC', type: 'LUNAR FACT \u2022 SCIENCE', text: 'Moonquakes occur regularly but are much weaker than earthquakes. The Moon is still slowly cooling and contracting.' },
-  { title: 'LAVA TUBES', type: 'LUNAR FACT \u2022 GEOLOGY', text: 'Massive lava tubes beneath the surface could shelter future lunar colonies from radiation and temperature extremes.' },
-  { title: 'HARVEST MOON', type: 'LUNAR FACT \u2022 CULTURE', text: "The Harvest Moon appears larger and brighter than usual. This optical illusion is due to our brain's size perception." },
-  { title: 'DARK SIDE', type: 'LUNAR FACT \u2022 MYSTERY', text: "The far side is actually brighter! It's called \"dark\" because we couldn't see it from Earth until satellites revealed it." },
-  { title: 'FORMATION', type: 'LUNAR FACT \u2022 HISTORY', text: 'Scientists believe the Moon formed 4.51 billion years ago when a Mars-sized object collided with young Earth.' },
+  { title: 'GRAVITY', type: 'LUNAR FACT • PHYSICS', text: 'The Moon has 1/6th the gravity of Earth. A 180lb astronaut weighs only 30lb on the lunar surface!' },
+  { title: 'DUST', type: 'LUNAR FACT • MATERIAL', text: 'Moon dust is extremely abrasive and can damage equipment. Its particles are sharp and electrostatically charged.' },
+  { title: 'TEMPERATURE', type: 'LUNAR FACT • CLIMATE', text: 'Lunar surface temps swing from -173°C in shadow to 127°C in sunlight. Extreme conditions test rovers daily.' },
+  { title: 'CRATERS', type: 'LUNAR FACT • GEOLOGY', text: 'The Moon has over 300,000 craters larger than 1km. They reveal billions of years of cosmic impacts.' },
+  { title: 'ROTATION', type: 'LUNAR FACT • ASTRONOMY', text: 'The Moon is tidally locked to Earth. We always see the same face—the far side remained unknown until 1959.' },
+  { title: 'WATER ICE', type: 'LUNAR FACT • DISCOVERY', text: 'In 2008, water ice was detected in lunar soil. Permanently shadowed craters at the poles hold ancient frozen water.' },
+  { title: 'REGOLITH', type: 'LUNAR FACT • GEOLOGY', text: 'The Moon\'s surface layer is called regolith. It\'s ancient powdered rock created by billions of years of asteroid bombardment.' },
+  { title: 'SEISMIC', type: 'LUNAR FACT • SCIENCE', text: 'Moonquakes occur regularly but are much weaker than earthquakes. The Moon is still slowly cooling and contracting.' },
+  { title: 'LAVA TUBES', type: 'LUNAR FACT • GEOLOGY', text: 'Massive lava tubes beneath the surface could shelter future lunar colonies from radiation and temperature extremes.' },
+  { title: 'HARVEST MOON', type: 'LUNAR FACT • CULTURE', text: 'The Harvest Moon appears larger and brighter than usual. This optical illusion is due to our brain\'s size perception.' },
+  { title: 'DARK SIDE', type: 'LUNAR FACT • MYSTERY', text: 'The far side is actually brighter! It\'s called "dark" because we couldn\'t see it from Earth until satellites revealed it.' },
+  { title: 'FORMATION', type: 'LUNAR FACT • HISTORY', text: 'Scientists believe the Moon formed 4.51 billion years ago when a Mars-sized object collided with young Earth.' },
 ];
 
 // Game state
@@ -290,7 +290,7 @@ function drawGround() {
   cx.closePath();
   cx.fill();
 
-  // Moon ground (scrolls at 40% \u2014 ox is already game.ox * 0.4)
+  // Moon ground (scrolls at 40% — ox is already game.ox * 0.4)
   const moonOx = ox;
   const grad = cx.createLinearGradient(0, baseY, 0, 746);
   grad.addColorStop(0, '#d0c8b8');
@@ -336,38 +336,47 @@ function drawGround() {
 function drawObstacle(obs) {
   const baseY = 540;
   const ox = game.ox * 0.4;
-  const y = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
-                    Math.sin((obs.x + ox) * 0.015) * 4 +
-                    Math.sin((obs.x + ox) * 0.04) * 2 - obs.h;
+  // Ground Y at obstacle position — obstacle base sits HERE
+  const gndY = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
+                        Math.sin((obs.x + ox) * 0.015) * 4 +
+                        Math.sin((obs.x + ox) * 0.04) * 2;
 
   if (obs.type === 'rock') {
     cx.fillStyle = '#8a7a6a';
     cx.beginPath();
-    cx.moveTo(obs.x, y);
-    cx.lineTo(obs.x + 15, y - 8);
-    cx.lineTo(obs.x + 20, y);
-    cx.lineTo(obs.x + 15, y + 3);
+    cx.moveTo(obs.x, gndY);
+    cx.lineTo(obs.x + 5, gndY - obs.h);
+    cx.lineTo(obs.x + 10, gndY - obs.h + 3);
+    cx.lineTo(obs.x + 15, gndY - obs.h - 2);
+    cx.lineTo(obs.x + 20, gndY);
     cx.closePath();
     cx.fill();
     cx.strokeStyle = '#a09a8a';
     cx.lineWidth = 2;
     cx.stroke();
   } else if (obs.type === 'water') {
+    // Ice puddle on ground surface
     cx.fillStyle = '#3a7aff';
     cx.beginPath();
-    cx.ellipse(obs.x + 10, y + 2, 12, 6, 0, 0, Math.PI * 2);
+    cx.ellipse(obs.x + 10, gndY - 2, 12, 5, 0, 0, Math.PI * 2);
     cx.fill();
     cx.strokeStyle = '#1a5adf';
     cx.lineWidth = 2;
     cx.stroke();
   } else if (obs.type === 'crater') {
+    // Crater hole on ground surface
     cx.fillStyle = '#6a5a4a';
     cx.beginPath();
-    cx.ellipse(obs.x + 10, y + 4, 14, 8, 0, 0, Math.PI * 2);
+    cx.ellipse(obs.x + 10, gndY - 2, 14, 6, 0, 0, Math.PI * 2);
     cx.fill();
     cx.strokeStyle = '#4a3a2a';
     cx.lineWidth = 2;
     cx.stroke();
+    // Dark inner
+    cx.fillStyle = '#3a2a1a';
+    cx.beginPath();
+    cx.ellipse(obs.x + 10, gndY - 1, 8, 3, 0, 0, Math.PI * 2);
+    cx.fill();
   }
 }
 
@@ -519,12 +528,12 @@ function updateGame() {
     const obs = game.obstacles[i];
     const baseY = 540;
     const ox = game.ox * 0.4;
-    const oy = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
-                       Math.sin((obs.x + ox) * 0.015) * 4 +
-                       Math.sin((obs.x + ox) * 0.04) * 2 - obs.h;
+    const gndY = baseY + Math.sin((obs.x + ox) * 0.005) * 8 +
+                          Math.sin((obs.x + ox) * 0.015) * 4 +
+                          Math.sin((obs.x + ox) * 0.04) * 2;
 
     const hitbox = { x: game.roverX + 5, y: game.y + 5, w: 40, h: 25 };
-    const obsbox = { x: obs.x, y: oy, w: 20, h: obs.h };
+    const obsbox = { x: obs.x, y: gndY - obs.h, w: 20, h: obs.h };
 
     if (hitbox.x < obsbox.x + obsbox.w && hitbox.x + hitbox.w > obsbox.x &&
         hitbox.y < obsbox.y + obsbox.h && hitbox.y + hitbox.h > obsbox.y) {
@@ -742,7 +751,7 @@ function drawStageMap() {
       cx.fillStyle = '#000';
       cx.font = 'bold 16px Arial';
       cx.textAlign = 'center';
-      cx.fillText('\u2713', pos.x, pos.y + 6);
+      cx.fillText('✓', pos.x, pos.y + 6);
     } else if (i === game.stage) {
       // Active (pulsing)
       const pulse = Math.sin(game.fr * 0.1) * 0.3 + 0.7;
@@ -839,7 +848,7 @@ function drawGameOver() {
   cx.fillStyle = '#000';
   cx.font = 'bold 14px Arial';
   cx.textAlign = 'center';
-  cx.fillText('\ud83c\udf19', cx_b, cy_b + 5);
+  cx.fillText('🌙', cx_b, cy_b + 5);
 
   // Fact text (stored when entering game over state)
   const fact = game.currentFact || lunarFacts[0];
